@@ -86,12 +86,6 @@ public class OfflineMessageStrategy extends BasicModule {
                     !UserManager.getInstance().isRegisteredUser(recipientJID.getNode())) {
                 return;
             }
-            // Do not store messages of type groupchat, error or headline as specified in JEP-160
-            if (Message.Type.groupchat == message.getType() ||
-                    Message.Type.error == message.getType() ||
-                    Message.Type.headline == message.getType()) {
-                return;
-            }
             // Do not store messages if communication is blocked
             PrivacyList list =
                     PrivacyListManager.getInstance().getDefaultPrivacyList(recipientJID.getNode());
@@ -151,11 +145,19 @@ public class OfflineMessageStrategy extends BasicModule {
     }
 
     private void store(Message message) {
-        messageStore.addMessage(message);
+        // Inform listeners that an offline message is going to be stored
+        if (!listeners.isEmpty()) {
+            for (OfflineMessageListener listener : listeners) {
+                listener.beforeMessageStore(message);
+            }
+        }
+
+        boolean stored = messageStore.addMessage(message);
+
         // Inform listeners that an offline message was stored
         if (!listeners.isEmpty()) {
             for (OfflineMessageListener listener : listeners) {
-                listener.messageStored(message);
+                listener.messageStored(message, stored);
             }
         }
     }

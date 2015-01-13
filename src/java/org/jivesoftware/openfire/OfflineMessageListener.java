@@ -40,10 +40,18 @@ public interface OfflineMessageListener {
     void messageBounced(Message message);
 
     /**
+    * Notification message indicating that a message is going to be stored offline.
+    *
+    * @param message the message that is going to be persisted.
+    */
+    void beforeMessageStore(Message message);
+
+    /**
      * Notification message indicating that a message was stored offline since the target entity
      * was not online at the moment.
      *
      * @param message the message that was stored offline.
+     * @param stored true only if message was actually persisted.
      */
-    void messageStored(Message message);
+    void messageStored(Message message, boolean stored);
 }
