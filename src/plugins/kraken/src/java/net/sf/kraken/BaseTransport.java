@@ -50,6 +50,7 @@ import org.jivesoftware.openfire.user.UserNotFoundException;
 import org.jivesoftware.openfire.vcard.VCardListener;
 import org.jivesoftware.openfire.vcard.VCardEventDispatcher;
 import org.jivesoftware.util.*;
+import org.jivesoftware.util.Base64;
 import org.jivesoftware.util.cache.CacheFactory;
 import org.xmpp.component.Component;
 import org.xmpp.component.ComponentManager;

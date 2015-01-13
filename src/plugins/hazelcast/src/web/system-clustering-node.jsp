@@ -10,6 +10,7 @@
                  org.jivesoftware.openfire.cluster.ClusterNodeInfo"
 %>
 <%@ page import="org.jivesoftware.util.*" %>
+<%@ page import="org.jivesoftware.util.Base64" %>
 <%@ page import="org.jivesoftware.util.cache.Cache" %>
 <%@ page import="java.text.DecimalFormat" %>
 <%@ page import="java.text.NumberFormat" %>
