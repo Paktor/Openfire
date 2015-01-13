@@ -150,7 +150,7 @@ public abstract class StanzaHandler {
             return;
         }
         // Create DOM object from received stanza
-        Element doc = reader.read(new StringReader(stanza)).getRootElement();
+        Element doc = reader.parseDocument(stanza).getRootElement();
         if (doc == null) {
             // No document found.
             return;

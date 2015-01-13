@@ -260,9 +260,14 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
             else {
                 addedToCache = !offlinePresence.equals(offlinePresenceCache.put(username, offlinePresence));
             }
-            if (!addedToCache) {
-                return;
-            }
+
+            // if user did not change presence status (or status was not set)
+            // then 'last seen' time is not updated at all - only on first cache hit
+
+            //if (!addedToCache) {
+            //    return;
+            //}
+
             lastActivityCache.put(username, offlinePresenceDate.getTime());
 
             writeToDatabase(username, offlinePresence, offlinePresenceDate);

@@ -113,7 +113,7 @@ public class IQRouter extends BasicModule {
                         packet.toXML());
             }
             else if (session == null || session.getStatus() == Session.STATUS_AUTHENTICATED || (
-                    isLocalServer(to) && (
+                    isLocalServer(to) && (packet.getChildElement() != null) && (
                             "jabber:iq:auth".equals(packet.getChildElement().getNamespaceURI()) ||
                                     "jabber:iq:register"
                                             .equals(packet.getChildElement().getNamespaceURI()) ||
@@ -422,7 +422,7 @@ public class IQRouter extends BasicModule {
         reply.setChildElement(originalPacket.getChildElement().createCopy());
         reply.setError(condition);
         // Check if the server was the sender of the IQ
-        if (serverName.equals(originalPacket.getFrom().toString())) {
+        if (originalPacket.getFrom() != null && serverName.equals(originalPacket.getFrom().toString())) {
             // Just let the IQ router process the IQ error reply
             handle(reply);
             return;
