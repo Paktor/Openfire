@@ -9,14 +9,28 @@
 
 package org.dom4j.io;
 
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Slf4jReporter;
+import org.apache.commons.pool2.impl.GenericObjectPool;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.dom4j.*;
 import org.jivesoftware.openfire.net.MXParser;
+import org.xml.sax.InputSource;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
 
 import java.io.*;
 import java.net.URL;
+import java.util.StringTokenizer;
+
+import static com.codahale.metrics.MetricRegistry.name;
+import static com.codahale.metrics.Slf4jReporter.forRegistry;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 /**
  * <p><code>XMPPPacketReader</code> is a Reader of DOM4J documents that
@@ -56,6 +70,36 @@ public class XMPPPacketReader {
      */
     private long lastActive = System.currentTimeMillis();
 
+    /**
+     * One pool for all, XMPPPacketReader almost used as ThreadLocal
+     */
+    private static final GenericObjectPool<SAXReader> saxReaderPool;
+    private static final MetricRegistry metricRegistry = new MetricRegistry();
+    private static final Meter readerMeter;
+    static {
+        GenericObjectPoolConfig config = new GenericObjectPoolConfig();
+        config.setNumTestsPerEvictionRun(50);
+        config.setTimeBetweenEvictionRunsMillis(10L * 60L * 1000L);
+        config.setMinEvictableIdleTimeMillis(5L * 60L * 1000L);
+        config.setMinIdle(10);
+        config.setMaxIdle(-1);
+        config.setMaxTotal(-1);
+        saxReaderPool = new GenericObjectPool<SAXReader>(new SAXReaderFactory(), config);
+
+        final Slf4jReporter reporter = forRegistry(metricRegistry)
+                .convertRatesTo(SECONDS)
+                .convertDurationsTo(MILLISECONDS)
+                .build();
+        reporter.start(60, MINUTES);
+
+        readerMeter = metricRegistry.meter(name("XMPPPacketReader", "parseDocument"));
+        metricRegistry.register(name("XMPPPacketReader", "saxReaderPool"), new Gauge<Integer>() {
+            @Override
+            public Integer getValue() {
+                return saxReaderPool.getNumActive();
+            }
+        });
+    }
 
     public XMPPPacketReader() {
     }
@@ -298,10 +342,57 @@ public class XMPPPacketReader {
 
         // Simple way
         // TODO Optimize. Do not create a sax reader for each parsing
-        Document document = DocumentHelper.parseText(xml);
+        //return DocumentHelper.parseText(xml);
 
-        return document;
+        Document result = null;
+        SAXReader reader = null;
+        try {
+            reader = saxReaderPool.borrowObject();
+
+            readerMeter.mark();
+
+            String encoding = getEncoding(xml);
+            InputSource source = new InputSource(new StringReader(xml));
+            source.setEncoding(encoding);
+            result = reader.read(source);
+            if (result.getXMLEncoding() == null) {
+                result.setXMLEncoding(encoding);
+            }
+        } catch (DocumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DocumentException(e.getMessage(), e);
+        } finally {
+            if (reader != null) {
+                saxReaderPool.returnObject(reader);
+            }
+        }
+
+        return result;
     }
+
+    private static String getEncoding(String text) {
+        String result = null;
+        String xml = text.trim();
+        if(xml.startsWith("<?xml")) {
+            int end = xml.indexOf("?>");
+            String sub = xml.substring(0, end);
+            StringTokenizer tokens = new StringTokenizer(sub, " =\"\'");
+
+            while(tokens.hasMoreTokens()) {
+                String token = tokens.nextToken();
+                if("encoding".equals(token)) {
+                    if(tokens.hasMoreTokens()) {
+                        result = tokens.nextToken();
+                    }
+                    break;
+                }
+            }
+        }
+
+        return result;
+    }
+
 
     // Implementation methods
     //-------------------------------------------------------------------------
