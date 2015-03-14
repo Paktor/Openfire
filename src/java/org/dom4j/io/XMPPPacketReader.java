@@ -10,13 +10,13 @@
 package org.dom4j.io;
 
 import com.codahale.metrics.Gauge;
-import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Slf4jReporter;
 import org.apache.commons.pool2.impl.GenericObjectPool;
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.dom4j.*;
 import org.jivesoftware.openfire.net.MXParser;
+import org.jivesoftware.util.JiveGlobals;
+import org.jivesoftware.util.metric.MetricRegistryFactory;
 import org.xml.sax.InputSource;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -27,10 +27,6 @@ import java.net.URL;
 import java.util.StringTokenizer;
 
 import static com.codahale.metrics.MetricRegistry.name;
-import static com.codahale.metrics.Slf4jReporter.forRegistry;
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static java.util.concurrent.TimeUnit.MINUTES;
-import static java.util.concurrent.TimeUnit.SECONDS;
 
 /**
  * <p><code>XMPPPacketReader</code> is a Reader of DOM4J documents that
@@ -74,29 +70,21 @@ public class XMPPPacketReader {
      * One pool for all, XMPPPacketReader almost used as ThreadLocal
      */
     private static final GenericObjectPool<SAXReader> saxReaderPool;
-    private static final MetricRegistry metricRegistry = new MetricRegistry();
-    private static final Meter readerMeter;
     static {
         GenericObjectPoolConfig config = new GenericObjectPoolConfig();
-        config.setNumTestsPerEvictionRun(50);
-        config.setTimeBetweenEvictionRunsMillis(10L * 60L * 1000L);
-        config.setMinEvictableIdleTimeMillis(5L * 60L * 1000L);
-        config.setMinIdle(10);
-        config.setMaxIdle(-1);
-        config.setMaxTotal(-1);
+        config.setNumTestsPerEvictionRun(JiveGlobals.getIntProperty("packet.reader.pool.numTestsPerEvictionRun", 50));
+        config.setTimeBetweenEvictionRunsMillis((long) JiveGlobals.getIntProperty("packet.reader.pool.timeBetweenEvictionRunsSec", 10 * 60) * 1000L);
+        config.setMinEvictableIdleTimeMillis((long) JiveGlobals.getIntProperty("packet.reader.pool.minEvictableIdleTimeSec", 5 * 60) * 1000L);
+        config.setMinIdle(JiveGlobals.getIntProperty("packet.reader.pool.minIdle", 10));
+        config.setMaxIdle(JiveGlobals.getIntProperty("packet.reader.pool.maxIdle", -1));
+        config.setMaxTotal(JiveGlobals.getIntProperty("packet.reader.pool.maxTotal", -1));
         saxReaderPool = new GenericObjectPool<SAXReader>(new SAXReaderFactory(), config);
 
-        final Slf4jReporter reporter = forRegistry(metricRegistry)
-                .convertRatesTo(SECONDS)
-                .convertDurationsTo(MILLISECONDS)
-                .build();
-        reporter.start(60, MINUTES);
-
-        readerMeter = metricRegistry.meter(name("XMPPPacketReader", "parseDocument"));
+        MetricRegistry metricRegistry = MetricRegistryFactory.getMetricRegistry();
         metricRegistry.register(name("XMPPPacketReader", "saxReaderPool"), new Gauge<Integer>() {
             @Override
             public Integer getValue() {
-                return saxReaderPool.getNumActive();
+                return saxReaderPool.getNumIdle();
             }
         });
     }
@@ -348,8 +336,6 @@ public class XMPPPacketReader {
         SAXReader reader = null;
         try {
             reader = saxReaderPool.borrowObject();
-
-            readerMeter.mark();
 
             String encoding = getEncoding(xml);
             InputSource source = new InputSource(new StringReader(xml));

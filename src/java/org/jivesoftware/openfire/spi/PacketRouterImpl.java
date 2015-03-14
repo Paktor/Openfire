@@ -20,12 +20,18 @@
 
 package org.jivesoftware.openfire.spi;
 
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
+import com.codahale.metrics.Timer.Context;
 import org.jivesoftware.openfire.*;
 import org.jivesoftware.openfire.container.BasicModule;
+import org.jivesoftware.util.metric.MetricRegistryFactory;
 import org.xmpp.packet.IQ;
 import org.xmpp.packet.Message;
 import org.xmpp.packet.Packet;
 import org.xmpp.packet.Presence;
+
+import static com.codahale.metrics.MetricRegistry.name;
 
 /**
  * An uber router that can handle any packet type.<p>
@@ -37,6 +43,10 @@ import org.xmpp.packet.Presence;
  */
 public class PacketRouterImpl extends BasicModule implements PacketRouter {
 
+    private final Timer messageTimer;
+    private final Timer iqTimer;
+    private final Timer presenceTimer;
+
     private IQRouter iqRouter;
     private PresenceRouter presenceRouter;
     private MessageRouter messageRouter;
@@ -46,6 +56,11 @@ public class PacketRouterImpl extends BasicModule implements PacketRouter {
      */
     public PacketRouterImpl() {
         super("XMPP Packet Router");
+
+        MetricRegistry metricRegistry = MetricRegistryFactory.getMetricRegistry();
+        messageTimer = metricRegistry.timer(name("PacketRouterImpl", "message"));
+        iqTimer = metricRegistry.timer(name("PacketRouterImpl", "iq"));
+        presenceTimer = metricRegistry.timer(name("PacketRouterImpl", "presence"));
     }
 
     /**
@@ -73,15 +88,30 @@ public class PacketRouterImpl extends BasicModule implements PacketRouter {
     }
 
     public void route(IQ packet) {
-        iqRouter.route(packet);
+        Context context = iqTimer.time();
+        try {
+            iqRouter.route(packet);
+        } finally {
+            context.stop();
+        }
     }
 
     public void route(Message packet) {
-        messageRouter.route(packet);
+        Context context = messageTimer.time();
+        try {
+            messageRouter.route(packet);
+        } finally {
+            context.stop();
+        }
     }
 
     public void route(Presence packet) {
-        presenceRouter.route(packet);
+        Context context = presenceTimer.time();
+        try {
+            presenceRouter.route(packet);
+        } finally {
+            context.stop();
+        }
     }
 
     @Override
