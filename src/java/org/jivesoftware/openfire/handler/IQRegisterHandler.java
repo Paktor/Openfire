@@ -170,10 +170,7 @@ public class IQRegisterHandler extends IQHandler implements ServerFeaturesProvid
         IQ reply = null;
         // If no session was found then answer an error (if possible)
         if (session == null) {
-            Log.error("Error during registration. Session not found in " +
-                    sessionManager.getPreAuthenticatedKeys() +
-                    " for key " +
-                    packet.getFrom());
+            Log.error("Error during registration, session was not found for "+ packet.getFrom());
             // This error packet will probably won't make it through
             reply = IQ.createResultIQ(packet);
             reply.setChildElement(packet.getChildElement().createCopy());

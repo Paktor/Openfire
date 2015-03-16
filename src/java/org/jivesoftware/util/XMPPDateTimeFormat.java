@@ -27,6 +27,8 @@ import java.util.TimeZone;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.apache.commons.lang.StringUtils.isBlank;
+
 //import net.jcip.annotations.ThreadSafe;
 
 /**
@@ -99,6 +101,9 @@ public class XMPPDateTimeFormat {
      * @throws ParseException
      */
     public Date parseString(String dateString) throws ParseException {
+        if (isBlank(dateString)) {
+            return null;
+        }
         Matcher xep82WoMillisMatcher = xep80DateTimeWoMillisPattern.matcher(dateString);
         Matcher xep82Matcher = xep80DateTimePattern.matcher(dateString);
 

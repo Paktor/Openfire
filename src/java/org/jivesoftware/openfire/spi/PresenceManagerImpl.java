@@ -24,6 +24,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.Types;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
@@ -292,6 +293,8 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
             }
             pstmt.setString(3, StringUtils.dateToMillis(offlinePresenceDate));
             pstmt.execute();
+        } catch (SQLIntegrityConstraintViolationException sqle) {
+            Log.warn("Error storing offline presence of user: " + username, sqle);
         } catch (SQLException sqle) {
             Log.error("Error storing offline presence of user: " + username, sqle);
         } finally {
