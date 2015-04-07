@@ -113,10 +113,8 @@ public class IQAuthHandler extends IQHandler implements IQAuthInfo {
         LocalClientSession session = (LocalClientSession) sessionManager.getSession(from);
         // If no session was found then answer an error (if possible)
         if (session == null) {
-            Log.error("Error during authentication. Session not found in " +
-                    sessionManager.getPreAuthenticatedKeys() +
-                    " for key " +
-                    from);
+            Log.error("Error during authentication, session was not found for " + from +
+                              ", preauth size " + sessionManager.getPreAuthenticatedKeys().size());
             // This error packet will probably won't make it through
             IQ reply = IQ.createResultIQ(packet);
             reply.setChildElement(packet.getChildElement().createCopy());

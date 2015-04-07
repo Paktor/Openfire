@@ -24,7 +24,6 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.TimeZone;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.apache.commons.lang.StringUtils.isBlank;
@@ -62,6 +61,8 @@ public class XMPPDateTimeFormat {
 
     // matches CCYY-MM-DDThh:mm:ss.SSS(Z|(+|-)hh:mm))
     private static final Pattern xep80DateTimePattern = Pattern.compile("^\\d+(-\\d+){2}+T(\\d+:){2}\\d+.\\d+(Z|([+-](\\d+:\\d+)))?$");
+    // matches CCYY-MM-DDThh:mm:ss:SSS(Z|(+|-)hhmm))
+    private static final Pattern xep80DateTimePattern2 = Pattern.compile("^\\d+(-\\d+){2}+T(\\d+:){3}\\d+(Z|([+-](\\d+)))?$");
     // matches CCYY-MM-DDThh:mm:ss(Z|(+|-)hh:mm))
     private static final Pattern xep80DateTimeWoMillisPattern = Pattern.compile("^\\d+(-\\d+){2}+T(\\d+:){2}\\d+(Z|([+-](\\d+:\\d+)))?$");
     // matches CCYYMMDDThh:mm:ss
@@ -104,16 +105,17 @@ public class XMPPDateTimeFormat {
         if (isBlank(dateString)) {
             return null;
         }
-        Matcher xep82WoMillisMatcher = xep80DateTimeWoMillisPattern.matcher(dateString);
-        Matcher xep82Matcher = xep80DateTimePattern.matcher(dateString);
+        boolean xep82WoMillisMatcher = xep80DateTimeWoMillisPattern.matcher(dateString).matches();
+        boolean xep82Matcher = xep80DateTimePattern.matcher(dateString).matches();
+        boolean xep82Matcher2 = xep80DateTimePattern2.matcher(dateString).matches();
 
-        if (xep82WoMillisMatcher.matches() || xep82Matcher.matches()) {
-            String rfc822Date;
+        if (xep82WoMillisMatcher || xep82Matcher || xep82Matcher2) {
+            String rfc822Date = dateString;
             // Convert the ISO 8601 time zone string to a RFC822 compatible format
             // since SimpleDateFormat supports ISO8601 only with Java7 or higher
             if (dateString.charAt(dateString.length() - 1) == 'Z') {
                 rfc822Date = dateString.replace("Z", "+0000");
-            } else {
+            } else if (!xep82Matcher2) {
                 // If the time zone wasn't specified with 'Z', then it's in
                 // ISO8601 format (i.e. '(+|-)HH:mm')
                 // RFC822 needs a similar format just without the colon (i.e.
@@ -122,7 +124,13 @@ public class XMPPDateTimeFormat {
                 rfc822Date = dateString.substring(0, lastColon) + dateString.substring(lastColon + 1);
             }
 
-            if (xep82WoMillisMatcher.matches()) {
+            if (xep82Matcher2){
+                // replace millis delimiter ':' with proper '.'
+                int lastColon = rfc822Date.lastIndexOf(':');
+                rfc822Date = rfc822Date.substring(0, lastColon) + '.' + rfc822Date.substring(lastColon + 1);
+            }
+
+            if (xep82WoMillisMatcher) {
                 synchronized (dateTimeFormatWoMillies) {
                     return dateTimeFormatWoMillies.parse(rfc822Date);
                 }
