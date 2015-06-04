@@ -78,6 +78,7 @@ public class CacheFactory {
 
     public static final int DEFAULT_MAX_CACHE_SIZE = 1024 * 256;
     public static final long DEFAULT_MAX_CACHE_LIFETIME = 6 * JiveConstants.HOUR;
+    public static final int DEFAULT_CACHE_CONCURRENCY = 4; // guava defaults
 
     /**
      * This map contains property names which were used to store cache configuration data
@@ -259,6 +260,19 @@ public class CacheFactory {
     public static void setMaxLifetimeProperty(String cacheName, long lifetime) {
         cacheName = cacheName.replaceAll(" ", "");
         JiveGlobals.setProperty(("cache." + cacheName + ".maxLifetime"), Long.toString(lifetime));
+    }
+
+    public static int getCacheConcurrency(String cacheName) {
+        return (int) getCacheProperty(cacheName, ".concurrency", DEFAULT_CACHE_CONCURRENCY);
+    }
+
+    public static void setCacheConcurrencyProperty(String cacheName, int concurrency) {
+        cacheName = cacheName.replaceAll(" ", "");
+        JiveGlobals.setProperty(("cache." + cacheName + ".concurrency"), Long.toString(concurrency));
+    }
+
+    public static boolean hasCacheConcurrencyProperty(String cacheName) {
+        return hasCacheProperty(cacheName, ".concurrency");
     }
 
     public static boolean hasMaxLifetimeFromProperty(String cacheName) {
