@@ -423,10 +423,13 @@ public class CacheFactory {
      * @param cache the cache used for holding the lock.
      * @return an existing lock on the specified key or creates a new one if none was found.
      */
-    public static synchronized Lock getLock(Object key, Cache cache) {
+    public static Lock getLock(Object key, Cache cache) {
         if (localOnly.contains(cache.getName())) {
+            // no need for sync entire call, obtaining the lock from strategy should be thread safe
+            // always produces new LocalLock but backed with same ReentrantLock and synced only by key
+            // (DefaultLocalCacheStrategy uses String.intern before sync by key, 'intern' is effectively thread safe)
         	return localCacheFactoryStrategy.getLock(key, cache);
-        } else {
+        } else synchronized (CacheFactory.class) { // leave sync for cluster mode just in case
         	return cacheFactoryStrategy.getLock(key, cache);
         }
     }
