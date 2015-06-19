@@ -149,6 +149,7 @@
     String hitPercent;
     long hits;
     long misses;
+    int items;
 %>
 
 <form action="system-cache.jsp" method="post" name="cacheForm">
@@ -177,6 +178,7 @@
         totalMem = (double)cache.getMaxCacheSize()/(1024*1024);
         freeMem = 100 - 100*memUsed/totalMem;
         usedMem = 100*memUsed/totalMem;
+        items = cache.size();
         hits = cache.getCacheHits();
         misses = cache.getCacheMisses();
         boolean lowEffec = false;
@@ -206,7 +208,7 @@
             <% } %>
         </td>
         <td class="c3">
-            <%= mbFormat.format(memUsed)%> MB
+            <%= mbFormat.format(memUsed)%> MB (<%= items%>)
         </td>
         <td class="c3">
             <% if (cache.getMaxCacheSize() != -1 && cache.getMaxCacheSize() != Integer.MAX_VALUE) { %>

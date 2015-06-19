@@ -78,6 +78,7 @@ public class CacheFactory {
 
     public static final int DEFAULT_MAX_CACHE_SIZE = 1024 * 256;
     public static final long DEFAULT_MAX_CACHE_LIFETIME = 6 * JiveConstants.HOUR;
+    public static final int DEFAULT_CACHE_CONCURRENCY = 4; // guava defaults
 
     /**
      * This map contains property names which were used to store cache configuration data
@@ -263,6 +264,19 @@ public class CacheFactory {
         JiveGlobals.setProperty(("cache." + cacheName + ".maxLifetime"), Long.toString(lifetime));
     }
 
+    public static int getCacheConcurrency(String cacheName) {
+        return (int) getCacheProperty(cacheName, ".concurrency", DEFAULT_CACHE_CONCURRENCY);
+    }
+
+    public static void setCacheConcurrencyProperty(String cacheName, int concurrency) {
+        cacheName = cacheName.replaceAll(" ", "");
+        JiveGlobals.setProperty(("cache." + cacheName + ".concurrency"), Long.toString(concurrency));
+    }
+
+    public static boolean hasCacheConcurrencyProperty(String cacheName) {
+        return hasCacheProperty(cacheName, ".concurrency");
+    }
+
     public static boolean hasMaxLifetimeFromProperty(String cacheName) {
         return hasCacheProperty(cacheName, ".maxLifetime");
     }
@@ -411,10 +425,13 @@ public class CacheFactory {
      * @param cache the cache used for holding the lock.
      * @return an existing lock on the specified key or creates a new one if none was found.
      */
-    public static synchronized Lock getLock(Object key, Cache cache) {
+    public static Lock getLock(Object key, Cache cache) {
         if (localOnly.contains(cache.getName())) {
+            // no need for sync entire call, obtaining the lock from strategy should be thread safe
+            // always produces new LocalLock but backed with same ReentrantLock and synced only by key
+            // (DefaultLocalCacheStrategy uses String.intern before sync by key, 'intern' is effectively thread safe)
         	return localCacheFactoryStrategy.getLock(key, cache);
-        } else {
+        } else synchronized (CacheFactory.class) { // leave sync for cluster mode just in case
         	return cacheFactoryStrategy.getLock(key, cache);
         }
     }

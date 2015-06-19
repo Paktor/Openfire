@@ -51,7 +51,7 @@ public class PEPServiceManager {
 	/**
 	 * Cache of PEP services. Table, Key: bare JID (String); Value: PEPService
 	 */
-	private final Cache<String, PEPService> pepServices = CacheFactory
+	private final Cache<String, PEPServiceCacheWrapper> pepServices = CacheFactory
 			.createLocalCache("PEPServiceManager");
 
 	private PubSubEngine pubSubEngine = null;
@@ -72,14 +72,14 @@ public class PEPServiceManager {
 			lock.lock();
 			if (pepServices.containsKey(jid)) {
 				// lookup in cache
-				pepService = pepServices.get(jid);
+				pepService = pepServices.get(jid).getService();
 			} else {
 				// lookup in database.
 				pepService = loadPEPServiceFromDB(jid);
 				
 				// always add to the cache, even if it doesn't exist. This will
 				// prevent future database lookups.
-				pepServices.put(jid, pepService);
+				pepServices.put(jid, new PEPServiceCacheWrapper(pepService));
 			}
 		} finally {
 			lock.unlock();
@@ -104,10 +104,10 @@ public class PEPServiceManager {
 		try {
 			lock.lock();
 
-			pepService = pepServices.get(bareJID);
-			if (pepService == null) {
+			PEPServiceCacheWrapper wrapper = pepServices.get(bareJID);
+			if (wrapper == null || wrapper.isNull()) {
 				pepService = new PEPService(XMPPServer.getInstance(), bareJID);
-				pepServices.put(bareJID, pepService);
+				pepServices.put(bareJID, new PEPServiceCacheWrapper(pepService));
 
 				if (Log.isDebugEnabled()) {
 					Log.debug("PEPService created for : " + bareJID);
@@ -145,7 +145,7 @@ public class PEPServiceManager {
 
 				// Create a new PEPService
 				pepService = new PEPService(XMPPServer.getInstance(), serviceID);
-				pepServices.put(serviceID, pepService);
+				pepServices.put(serviceID, new PEPServiceCacheWrapper(pepService));
 				pubSubEngine.start(pepService);
 
 				if (Log.isDebugEnabled()) {
@@ -174,7 +174,10 @@ public class PEPServiceManager {
 		final Lock lock = CacheFactory.getLock(owner, pepServices);
 		try {
 			lock.lock();
-			service = pepServices.remove(owner.toBareJID());
+			PEPServiceCacheWrapper wrapper = pepServices.remove(owner.toBareJID());
+			if (wrapper != null && !wrapper.isNull()) {
+				service = wrapper.getService();
+			}
 		} finally {
 			lock.unlock();
 		}
@@ -204,8 +207,10 @@ public class PEPServiceManager {
 
 	public void stop() {
 
-		for (PEPService service : pepServices.values()) {
-			pubSubEngine.shutdown(service);
+		for (PEPServiceCacheWrapper service : pepServices.values()) {
+			if (!service.isNull()) {
+				pubSubEngine.shutdown(service.getService());
+			}
 		}
 
 		pubSubEngine = null;
@@ -216,7 +221,8 @@ public class PEPServiceManager {
 	}
 	
 	public boolean hasCachedService(JID owner) {
-		return pepServices.get(owner.toBareJID()) != null;
+		final PEPServiceCacheWrapper wrapper = pepServices.get(owner.toBareJID());
+		return wrapper != null && !wrapper.isNull();
 	}
 	
 	// mimics Shutdown, without killing the timer.
