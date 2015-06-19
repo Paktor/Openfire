@@ -24,6 +24,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.Types;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
@@ -260,9 +261,14 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
             else {
                 addedToCache = !offlinePresence.equals(offlinePresenceCache.put(username, offlinePresence));
             }
-            if (!addedToCache) {
-                return;
-            }
+
+            // if user did not change presence status (or status was not set)
+            // then 'last seen' time is not updated at all - only on first cache hit
+
+            //if (!addedToCache) {
+            //    return;
+            //}
+
             lastActivityCache.put(username, offlinePresenceDate.getTime());
 
             writeToDatabase(username, offlinePresence, offlinePresenceDate);
@@ -287,6 +293,8 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
             }
             pstmt.setString(3, StringUtils.dateToMillis(offlinePresenceDate));
             pstmt.execute();
+        } catch (SQLIntegrityConstraintViolationException sqle) {
+            Log.warn("Error storing offline presence of user: " + username, sqle);
         } catch (SQLException sqle) {
             Log.error("Error storing offline presence of user: " + username, sqle);
         } finally {

@@ -176,7 +176,7 @@ public abstract class ConnectionHandler extends IoHandlerAdapter {
         try {
             handler.process((String) message, parser);
         } catch (Exception e) {
-            Log.error("Closing connection due to error while processing message: " + message, e);
+            Log.error("Closing connection [" + session.getRemoteAddress() + "] due to error while processing message: " + message, e);
             final Connection connection = (Connection) session.getAttribute(CONNECTION);
             if ( connection != null ) {
                 connection.close();

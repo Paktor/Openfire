@@ -437,7 +437,7 @@ public class IQRouter extends BasicModule {
         reply.setChildElement(originalPacket.getChildElement().createCopy());
         reply.setError(condition);
         // Check if the server was the sender of the IQ
-        if (serverName.equals(originalPacket.getFrom().toString())) {
+        if (originalPacket.getFrom() != null && serverName.equals(originalPacket.getFrom().toString())) {
             // Just let the IQ router process the IQ error reply
             handle(reply);
             return;

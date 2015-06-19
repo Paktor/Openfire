@@ -948,6 +948,7 @@ public class LocalMUCRoom implements MUCRoom, GroupEventListener {
             lock.writeLock().unlock();
         }
         // Send an unavailable presence to each removed occupant
+        String alternateFullJID = alternateJID != null ? alternateJID.toFullJID() : null;
         for (MUCRole removedRole : removedRoles) {
             try {
                 // Send a presence stanza of type "unavailable" to the occupant
@@ -960,8 +961,8 @@ public class LocalMUCRoom implements MUCRoom, GroupEventListener {
                 Element item = fragment.addElement("item");
                 item.addAttribute("affiliation", "none");
                 item.addAttribute("role", "none");
-                if (alternateJID != null) {
-                    fragment.addElement("destroy").addAttribute("jid", alternateJID.toFullJID());
+                if (alternateFullJID != null) {
+                    fragment.addElement("destroy").addAttribute("jid", alternateFullJID);
                 }
                 if (reason != null && reason.length() > 0) {
                     Element destroy = fragment.element("destroy");

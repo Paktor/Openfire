@@ -20,7 +20,6 @@
 
 package org.jivesoftware.openfire.muc;
 
-import java.text.ParseException;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -72,8 +71,8 @@ public class HistoryRequest {
                     // parse since String into Date
                     this.since = xmppDateTime.parseString(history.attributeValue("since"));
                 }
-                catch(ParseException pe) {
-                    Log.error("Error parsing date from history management", pe);
+                catch(Exception pe) {
+                    Log.warn("Error parsing date from history management", pe);
                     this.since = null;
                 }
             }
@@ -144,7 +143,7 @@ public class HistoryRequest {
         }
         else {
             Message changedSubject = roomHistory.getChangedSubject();
-            boolean addChangedSubject = (changedSubject != null) ? true : false;
+            boolean addChangedSubject = (changedSubject != null);
             if (getMaxChars() == 0) {
                 // The user requested to receive no history
                 if (addChangedSubject) {
@@ -186,7 +185,7 @@ public class HistoryRequest {
                             // Stop collecting history since we have exceded a limit
                             break;
                         }
-                        if (getSeconds() > -1) {
+                        if (getSeconds() > -1 && delayedDate != null) {
                             Date current = new Date();
                             long diff = (current.getTime() - delayedDate.getTime()) / 1000;
                             if (getSeconds() <= diff) {

@@ -61,7 +61,11 @@ public class SocketPacketWriteHandler implements ChannelHandler {
             // The target domain belongs to the local server
             else if (recipient == null || (recipient.getNode() == null && recipient.getResource() == null)) {
                 // no TO was found so send back the packet to the sender
-                routingTable.routePacket(packet.getFrom(), packet, false);
+                if (packet.getFrom() != null) {
+                    routingTable.routePacket(packet.getFrom(), packet, false);
+                } else {
+                    Log.warn("Drop packet " + packet.toXML());
+                }
             }
             else if (recipient.getResource() != null || !(packet instanceof Presence)) {
                 // JID is of the form <user@domain/resource>
