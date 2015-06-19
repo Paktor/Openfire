@@ -26,8 +26,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.jivesoftware.util.JiveConstants;
+import org.jivesoftware.util.JiveGlobals;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -69,9 +72,11 @@ public class SequenceManager {
     private static Map<Integer, SequenceManager> managers = new ConcurrentHashMap<Integer, SequenceManager>();
 
     static {
-        new SequenceManager(JiveConstants.ROSTER, 5);
-        new SequenceManager(JiveConstants.OFFLINE, 5);
-        new SequenceManager(JiveConstants.MUC_ROOM, 5);
+        new SequenceManager(JiveConstants.ROSTER, JiveGlobals.getIntProperty("sequence.18.blocksize", 10));
+        new SequenceManager(JiveConstants.OFFLINE, JiveGlobals.getIntProperty("sequence.19.blocksize", 10));
+        new SequenceManager(JiveConstants.MUC_ROOM, JiveGlobals.getIntProperty("sequence.23.blocksize", 5));
+        new SequenceManager(JiveConstants.MUC_SERVICE, JiveGlobals.getIntProperty("sequence.26.blocksize", 5));
+        new SequenceManager(JiveConstants.SECURITY_AUDIT, JiveGlobals.getIntProperty("sequence.25.blocksize", 5));
     }
 
     /**
@@ -87,7 +92,7 @@ public class SequenceManager {
         else {
             // Verify type is valid from the db, if so create an instance for the type
             // And return the next unique id
-            SequenceManager manager = new SequenceManager(type, 1);
+            SequenceManager manager = new SequenceManager(type, JiveGlobals.getIntProperty("sequence." + type + ".blocksize", 10));
             return manager.nextUniqueID();
         }
     }
@@ -130,6 +135,8 @@ public class SequenceManager {
      * @param blockSize how many blocks of ids we should.
      */
     public static void setBlockSize(int type, int blockSize) {
+        JiveGlobals.setProperty("sequence." + type + ".blocksize", String.valueOf(blockSize));
+
         if (managers.containsKey(type)) {
             managers.get(type).blockSize = blockSize;
         }
@@ -139,9 +146,10 @@ public class SequenceManager {
     }
 
     private int type;
-    private long currentID;
-    private long maxID;
-    private int blockSize;
+    private AtomicLong currentID;
+    private volatile long maxID;
+    private volatile int blockSize;
+    private ReentrantLock lock = new ReentrantLock();
 
     /**
      * Creates a new DbSequenceManager.
@@ -153,7 +161,7 @@ public class SequenceManager {
         managers.put(seqType, this);
         this.type = seqType;
         this.blockSize = size;
-        currentID = 0l;
+        currentID = new AtomicLong(0);
         maxID = 0l;
     }
 
@@ -161,14 +169,19 @@ public class SequenceManager {
      * Returns the next available unique ID. Essentially this provides for the functionality of an
      * auto-increment database field.
      */
-    public synchronized long nextUniqueID() {
-        if (!(currentID < maxID)) {
-            // Get next block -- make 5 attempts at maximum.
-            getNextBlock(5);
+    public long nextUniqueID() {
+        if (currentID.get() >= maxID) {
+            lock.lock();
+            try {
+                if (currentID.get() >= maxID) {
+                    // Get next block -- make 5 attempts at maximum.
+                    getNextBlock(5);
+                }
+            } finally {
+                lock.unlock();
+            }
         }
-        long id = currentID;
-        currentID++;
-        return id;
+        return currentID.getAndIncrement();
     }
 
     /**
@@ -223,7 +236,7 @@ public class SequenceManager {
             // round failed and we'll have to try again.
             success = pstmt.executeUpdate() == 1;
             if (success) {
-                this.currentID = currentID;
+                this.currentID.set(currentID);
                 this.maxID = newID;
             }
         }
