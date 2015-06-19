@@ -189,11 +189,19 @@ public class OfflineMessageStrategy extends BasicModule implements ServerFeature
     }
 
     private void store(Message message) {
-        messageStore.addMessage(message);
+        // Inform listeners that an offline message is going to be stored
+        if (!listeners.isEmpty()) {
+            for (OfflineMessageListener listener : listeners) {
+                listener.beforeMessageStore(message);
+            }
+        }
+
+        Long storeId = messageStore.addMessage(message);
+
         // Inform listeners that an offline message was stored
         if (!listeners.isEmpty()) {
             for (OfflineMessageListener listener : listeners) {
-                listener.messageStored(message);
+                listener.messageStored(message, storeId);
             }
         }
     }

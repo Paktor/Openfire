@@ -190,12 +190,6 @@
 <fmt:message key="offline.messages.info" />
 </p>
 
-<p>
-<fmt:message key="offline.messages.size" />
-<b><%= format.format(OfflineMessageStore.getInstance().getSize()/1024.0/1024.0) %> MB</b>
-</p>
-
-
 
 <!-- BEGIN 'Offline Message Policy' -->
 <form action="offline-messages.jsp">

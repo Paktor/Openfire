@@ -69,7 +69,7 @@ public class OfflineMessageStore extends BasicModule implements UserEventListene
         "INSERT INTO ofOffline (username, messageID, creationDate, messageSize, stanza) " +
         "VALUES (?, ?, ?, ?, ?)";
     private static final String LOAD_OFFLINE =
-        "SELECT stanza, creationDate FROM ofOffline WHERE username=?";
+        "SELECT stanza, creationDate FROM ofOffline WHERE username=? order by messageID";
     private static final String LOAD_OFFLINE_MESSAGE =
         "SELECT stanza FROM ofOffline WHERE username=? AND creationDate=?";
     private static final String SELECT_SIZE_OFFLINE =
@@ -118,24 +118,25 @@ public class OfflineMessageStore extends BasicModule implements UserEventListene
      * available for later delivery.
      *
      * @param message the message to store.
+     * @return stored message id or null
      */
-    public void addMessage(Message message) {
+    public Long addMessage(Message message) {
         if (message == null) {
-            return;
+            return null;
         }
         if(!shouldStoreMessage(message)) {
-            return;
+            return null;
         }
         JID recipient = message.getTo();
         String username = recipient.getNode();
         // If the username is null (such as when an anonymous user), don't store.
         if (username == null || !UserManager.getInstance().isRegisteredUser(recipient)) {
-            return;
+            return null;
         }
         else
         if (!XMPPServer.getInstance().getServerInfo().getXMPPDomain().equals(recipient.getDomain())) {
             // Do not store messages sent to users of remote servers
-            return;
+            return null;
         }
 
         long messageID = SequenceManager.nextID(JiveConstants.OFFLINE);
@@ -169,6 +170,7 @@ public class OfflineMessageStore extends BasicModule implements UserEventListene
             size += msgXML.length();
             sizeCache.put(username, size);
         }
+        return messageID;
     }
 
     /**
