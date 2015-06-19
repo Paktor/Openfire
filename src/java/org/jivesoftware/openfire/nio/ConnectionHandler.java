@@ -19,6 +19,9 @@
 
 package org.jivesoftware.openfire.nio;
 
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
+import com.codahale.metrics.Timer.Context;
 import org.apache.mina.core.service.IoHandlerAdapter;
 import org.apache.mina.core.session.IdleStatus;
 import org.apache.mina.core.session.IoSession;
@@ -27,11 +30,14 @@ import org.jivesoftware.openfire.Connection;
 import org.jivesoftware.openfire.net.MXParser;
 import org.jivesoftware.openfire.net.ServerTrafficCounter;
 import org.jivesoftware.openfire.net.StanzaHandler;
+import org.jivesoftware.util.metric.MetricRegistryFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
 import org.xmpp.packet.StreamError;
+
+import static com.codahale.metrics.MetricRegistry.name;
 
 /**
  * A ConnectionHandler is responsible for creating new sessions, destroying sessions and delivering
@@ -67,6 +73,9 @@ public abstract class ConnectionHandler extends IoHandlerAdapter {
      */
     private static XmlPullParserFactory factory = null;
 
+    private static final Timer readTimer;
+    private static final Timer writeTimer;
+
     static {
         try {
             factory = XmlPullParserFactory.newInstance(MXParser.class.getName(), null);
@@ -75,6 +84,10 @@ public abstract class ConnectionHandler extends IoHandlerAdapter {
         catch (XmlPullParserException e) {
             Log.error("Error creating a parser factory", e);
         }
+
+        MetricRegistry metricRegistry = MetricRegistryFactory.getMetricRegistry();
+        readTimer = metricRegistry.timer(name("ConnectionHandler", "read"));
+        writeTimer = metricRegistry.timer(name("ConnectionHandler", "write"));
     }
 
     protected ConnectionHandler(String serverName) {
@@ -162,35 +175,44 @@ public abstract class ConnectionHandler extends IoHandlerAdapter {
 
     @Override
 	public void messageReceived(IoSession session, Object message) throws Exception {
-        // Get the stanza handler for this session
-        StanzaHandler handler = (StanzaHandler) session.getAttribute(HANDLER);
-        // Get the parser to use to process stanza. For optimization there is going
-        // to be a parser for each running thread. Each Filter will be executed
-        // by the Executor placed as the first Filter. So we can have a parser associated
-        // to each Thread
-        final XMPPPacketReader parser = PARSER_CACHE.get();
-        // Update counter of read btyes
-        updateReadBytesCounter(session);
-        //System.out.println("RCVD: " + message);
-        // Let the stanza handler process the received stanza
+        Context context = readTimer.time();
         try {
-            handler.process((String) message, parser);
-        } catch (Exception e) {
-            Log.error("Closing connection [" + session.getRemoteAddress() + "] due to error while processing message: " + message, e);
-            final Connection connection = (Connection) session.getAttribute(CONNECTION);
-            if ( connection != null ) {
-                connection.close();
+            // Get the stanza handler for this session
+            StanzaHandler handler = (StanzaHandler) session.getAttribute(HANDLER);
+            // Get the parser to use to process stanza. For optimization there is going
+            // to be a parser for each running thread. Each Filter will be executed
+            // by the Executor placed as the first Filter. So we can have a parser associated
+            // to each Thread
+            final XMPPPacketReader parser = PARSER_CACHE.get();
+            // Update counter of read btyes
+            updateReadBytesCounter(session);
+            //System.out.println("RCVD: " + message);
+            // Let the stanza handler process the received stanza
+            try {
+                handler.process((String) message, parser);
+            } catch (Exception e) {
+                Log.error("Closing connection [" + session.getRemoteAddress() + "] due to error while processing message: " + message, e);
+                final Connection connection = (Connection) session.getAttribute(CONNECTION);
+                if ( connection != null ) {
+                    connection.close();
+                }
             }
-
+        } finally {
+            context.stop();
         }
     }
 
     @Override
     public void messageSent(IoSession session, Object message) throws Exception {
-        super.messageSent(session, message);
-        // Update counter of written btyes
-        updateWrittenBytesCounter(session);
-        //System.out.println("SENT: " + Charset.forName("UTF-8").decode(((ByteBuffer)message).buf()));
+        Context context = writeTimer.time();
+        try {
+            super.messageSent(session, message);
+            // Update counter of written btyes
+            updateWrittenBytesCounter(session);
+            //System.out.println("SENT: " + Charset.forName("UTF-8").decode(((ByteBuffer)message).buf()));
+        } finally {
+            context.stop();
+        }
     }
 
     abstract NIOConnection createNIOConnection(IoSession session);
