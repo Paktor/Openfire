@@ -289,7 +289,7 @@ public class XMPPPacketReader {
     /*
      * DANIELE: Add parse document by string
      */
-    public Document parseDocument(String xml) throws DocumentException {
+    public Document parseDocument(String xml) throws DocumentException, XmlPullParserException, IOException {
         /*
         // Long way with reuse of DocumentFactory.
         DocumentFactory df = getDocumentFactory();
@@ -298,9 +298,10 @@ public class XMPPPacketReader {
 
         // Simple way
         // TODO Optimize. Do not create a sax reader for each parsing
-        Document document = DocumentHelper.parseText(xml);
+        //Document document = DocumentHelper.parseText(xml);
 
-        return document;
+        getXPPParser().setInput(new StringReader(xml));
+        return parseDocument();
     }
 
     // Implementation methods
