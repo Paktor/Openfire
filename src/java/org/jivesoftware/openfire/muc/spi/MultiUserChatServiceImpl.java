@@ -221,7 +221,7 @@ public class MultiUserChatServiceImpl implements Component, MultiUserChatService
     /**
      * The time to elapse between each rooms cleanup. Default frequency is 60 minutes.
      */
-    private static final long CLEANUP_FREQUENCY = 60 * 60 * 1000;
+    private long emptyRoomCleanupFrequency = 60 * 60 * 1000;
 
     /**
      * Total number of received messages in all rooms since the last reset. The counter
@@ -514,11 +514,14 @@ public class MultiUserChatServiceImpl implements Component, MultiUserChatService
     }
 
     private void cleanupRooms() {
+        int removed = 0;
         for (MUCRoom room : rooms.values()) {
             if (room.getEmptyDate() != null && room.getEmptyDate().before(getCleanupDate())) {
                 removeChatRoom(room.getName());
+                removed ++;
             }
         }
+        Log.info("Rooms removed " + removed + ", rooms persisted " + rooms.size());
     }
 
     public MUCRoom getChatRoom(String roomName, JID userjid) throws NotAllowedException {
@@ -1078,14 +1081,33 @@ public class MultiUserChatServiceImpl implements Component, MultiUserChatService
                 Log.error("Wrong number format of property tasks.log.batchsize for service "+chatServiceName, e);
             }
         }
-        value = MUCPersistenceManager.getProperty(chatServiceName, "unload.empty_days");
+        value = MUCPersistenceManager.getProperty(chatServiceName, "unload.empty_hours");
         emptyLimit = 30 * 24;
         if (value != null) {
+            try {
+                emptyLimit = Integer.parseInt(value);
+            }
+            catch (NumberFormatException e) {
+                Log.error("Wrong number format of property unload.empty_hours for service "+chatServiceName, e);
+            }
+        } else {
+            value = MUCPersistenceManager.getProperty(chatServiceName, "unload.empty_days");
             try {
                 emptyLimit = Integer.parseInt(value) * 24;
             }
             catch (NumberFormatException e) {
                 Log.error("Wrong number format of property unload.empty_days for service "+chatServiceName, e);
+            }
+        }
+
+        value = MUCPersistenceManager.getProperty(chatServiceName, "unload.empty_cleanup_minutes");
+        emptyRoomCleanupFrequency = 60 * 60 * 1000;
+        if (value != null) {
+            try {
+                emptyRoomCleanupFrequency = Integer.parseInt(value) * 60 * 1000;
+            }
+            catch (NumberFormatException e) {
+                Log.error("Wrong number format of property unload.empty_cleanup_minutes for service "+chatServiceName, e);
             }
         }
     }
@@ -1101,7 +1123,7 @@ public class MultiUserChatServiceImpl implements Component, MultiUserChatService
         TaskEngine.getInstance().schedule(logConversationTask, log_timeout, log_timeout);
         // Remove unused rooms from memory
         cleanupTask = new CleanupTask();
-        TaskEngine.getInstance().schedule(cleanupTask, CLEANUP_FREQUENCY, CLEANUP_FREQUENCY);
+        TaskEngine.getInstance().schedule(cleanupTask, emptyRoomCleanupFrequency, emptyRoomCleanupFrequency);
 
         // Set us up to answer disco item requests
         XMPPServer.getInstance().getIQDiscoItemsHandler().addServerItemsProvider(this);
