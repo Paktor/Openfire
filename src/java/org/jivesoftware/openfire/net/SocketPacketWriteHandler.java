@@ -79,7 +79,7 @@ public class SocketPacketWriteHandler implements ChannelHandler {
             }
         }
         catch (Exception e) {
-            Log.error(LocaleUtils.getLocalizedString("admin.error.deliver") + "\n" + packet.toString(), e);
+            Log.error(LocaleUtils.getLocalizedString("admin.error.deliver") + ". " + packet.toXML(), e);
         }
     }
 }
