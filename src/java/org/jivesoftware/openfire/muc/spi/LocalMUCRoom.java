@@ -2183,8 +2183,11 @@ public class LocalMUCRoom implements MUCRoom, GroupEventListener {
      */
     private void kickPresence(Presence kickPresence, JID actorJID) {
         // Get the role(s) to kick
-        List<MUCRole> occupants = new ArrayList<MUCRole>(occupantsByNickname.get(kickPresence.getFrom().getResource().toLowerCase()));
-        for (MUCRole kickedRole : occupants) {
+        final List<MUCRole> list = occupantsByNickname.get(kickPresence.getFrom().getResource().toLowerCase());
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+        for (MUCRole kickedRole : new ArrayList<MUCRole>(list)) {
             kickPresence = kickPresence.createCopy();
             // Add the actor's JID that kicked this user from the room
             if (actorJID != null && actorJID.toString().length() > 0) {

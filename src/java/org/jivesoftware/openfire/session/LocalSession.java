@@ -32,7 +32,7 @@ import org.jivesoftware.openfire.interceptor.InterceptorManager;
 import org.jivesoftware.openfire.interceptor.PacketRejectedException;
 import org.jivesoftware.openfire.net.SocketConnection;
 import org.jivesoftware.openfire.net.TLSStreamHandler;
-import org.jivesoftware.openfire.spi.RoutingTableImpl;
+import org.jivesoftware.openfire.nio.DeliverAttemptToClosedConnection;
 import org.jivesoftware.util.LocaleUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -292,6 +292,18 @@ public abstract class LocalSession implements Session {
             }
             catch (PacketRejectedException e) {
                 // An interceptor rejected the packet so do nothing
+            }
+            catch (DeliverAttemptToClosedConnection e) {
+                // do not report presence and errors
+                boolean swallow = (packet instanceof Presence) ||
+                        (packet instanceof Message && ((Message) packet).getType() == Message.Type.error) ||
+                        (packet instanceof IQ && ((IQ) packet).getType() == IQ.Type.error);
+
+                if (swallow) {
+                    Log.warn("Connection is closed: " + packet.toXML());
+                } else {
+                    Log.error("Connection is closed: " + packet.toXML());
+                }
             }
             catch (Exception e) {
                 Log.error(LocaleUtils.getLocalizedString("admin.error"), e);

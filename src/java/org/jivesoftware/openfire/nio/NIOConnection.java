@@ -279,6 +279,9 @@ public class NIOConnection implements Connection {
 
     public void deliver(Packet packet) throws UnauthorizedException {
         if (isClosed()) {
+            if (backupDeliverer == null) {
+                throw new DeliverAttemptToClosedConnection();
+            }
         	backupDeliverer.deliver(packet);
         }
         else {
@@ -314,7 +317,9 @@ public class NIOConnection implements Connection {
                 close();
                 // Retry sending the packet again. Most probably if the packet is a
                 // Message it will be stored offline
-                backupDeliverer.deliver(packet);
+                if (backupDeliverer != null) {
+                    backupDeliverer.deliver(packet);
+                }
             }
             else {
                 session.incrementServerPacketCount();
