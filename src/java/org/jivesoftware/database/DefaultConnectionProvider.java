@@ -25,6 +25,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import org.jivesoftware.util.ImmutableProperties;
 import org.jivesoftware.util.JiveGlobals;
 import org.logicalcobwebs.proxool.ConnectionPoolDefinitionIF;
 import org.logicalcobwebs.proxool.ProxoolException;
@@ -91,8 +92,12 @@ public class DefaultConnectionProvider implements ConnectionProvider {
     }
 
     public void start() {
-        proxoolURL = "proxool.openfire:"+getDriver()+":"+getServerURL();
-        settings = new Properties();
+        proxoolURL = "proxool.openfire:" + getDriver() + ":" + getServerURL();
+        settings = new ImmutableProperties(getSettings()); // no synchronisation for methods like size() and etc
+    }
+
+    private Properties getSettings() {
+        Properties settings = new Properties();
         settings.setProperty("proxool.maximum-activetime", Integer.toString(activeTimeout));
         settings.setProperty("proxool.maximum-connection-count", Integer.toString(getMaxConnections()));
         settings.setProperty("proxool.minimum-connection-count", Integer.toString(getMinConnections()));
@@ -102,6 +107,7 @@ public class DefaultConnectionProvider implements ConnectionProvider {
         settings.setProperty("proxool.house-keeping-test-sql", testSQL);
         settings.setProperty("user", getUsername());
         settings.setProperty("password", (getPassword() != null ? getPassword() : ""));
+        return settings;
     }
 
     public void restart() {
