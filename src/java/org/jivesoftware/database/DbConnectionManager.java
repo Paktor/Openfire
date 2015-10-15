@@ -138,8 +138,8 @@ public class DbConnectionManager {
             } catch (SQLException e) {
             	// TODO distinguish recoverable from non-recoverable exceptions.
             	lastException = e;
-            	Log.info("Unable to get a connection from the database pool " +
-            			"(attempt "+retryCnt+" out of "+retryMax+").", e);
+            	Log.debug("Unable to get a connection from the database pool (attempt {} out of {})",
+                          retryCnt, retryMax, e);
 			}
             try {
                 Thread.sleep(retryWait);

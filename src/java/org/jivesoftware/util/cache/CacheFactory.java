@@ -77,7 +77,7 @@ public class CacheFactory {
     private static Thread statsThread;
 
     public static final int DEFAULT_MAX_CACHE_SIZE = 1024 * 256;
-    public static final long DEFAULT_MAX_CACHE_LIFETIME = 6 * JiveConstants.HOUR;
+    public static final long DEFAULT_MAX_CACHE_LIFETIME = JiveConstants.HOUR; // 6 hrs was default
     public static final int DEFAULT_CACHE_CONCURRENCY = 4; // guava defaults
 
     /**
