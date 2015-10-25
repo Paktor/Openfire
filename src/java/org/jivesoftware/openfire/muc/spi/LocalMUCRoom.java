@@ -2740,6 +2740,9 @@ public class LocalMUCRoom implements MUCRoom, GroupEventListener {
 	public void groupCreated(Group group, Map params) {
 		// ignore
 	}
-	
-	
+
+    @Override
+    public void close() {
+        GroupEventDispatcher.removeListener(this);
+    }
 }

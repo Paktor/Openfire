@@ -482,8 +482,8 @@ public class MUCPersistenceManager {
             resultSet = statement.executeQuery();
 
             while (resultSet.next()) {
+                LocalMUCRoom room = new LocalMUCRoom(chatserver, resultSet.getString(4), packetRouter);
                 try {
-                    LocalMUCRoom room = new LocalMUCRoom(chatserver, resultSet.getString(4), packetRouter);
                     room.setID(resultSet.getLong(1));
                     room.setCreationDate(new Date(Long.parseLong(resultSet.getString(2).trim()))); // creation date
                     room.setModificationDate(new Date(Long.parseLong(resultSet.getString(3).trim()))); // modification date
@@ -522,8 +522,11 @@ public class MUCPersistenceManager {
                     room.setChangeNickname(resultSet.getInt(21) == 1);
                     room.setRegistrationEnabled(resultSet.getInt(22) == 1);
                     room.setPersistent(true);
+
                     rooms.put(room.getID(), room);
+
                 } catch (SQLException e) {
+                    room.close();
                     Log.error("A database exception prevented one particular MUC room to be loaded from the database.", e);
                 }
             }

@@ -76,7 +76,6 @@ import org.xmpp.packet.IQ;
 import org.xmpp.packet.JID;
 import org.xmpp.packet.Message;
 import org.xmpp.packet.Packet;
-import org.xmpp.packet.PacketError;
 import org.xmpp.packet.Presence;
 import org.xmpp.resultsetmanagement.ResultSet;
 
@@ -515,7 +514,7 @@ public class MultiUserChatServiceImpl implements Component, MultiUserChatService
 
     private void cleanupRooms() {
         int removed = 0;
-        for (MUCRoom room : rooms.values()) {
+        for (MUCRoom room : new ArrayList<>(rooms.values())) {
             if (room.getEmptyDate() != null && room.getEmptyDate().before(getCleanupDate())) {
                 removeChatRoom(room.getName());
                 removed ++;
@@ -553,8 +552,8 @@ public class MultiUserChatServiceImpl implements Component, MultiUserChatService
                         else {
                             // Room does not exist and delegate does not recognize it and does
                             // not allow room creation
+                            room.close();
                             throw new NotAllowedException();
-
                         }
                     }
                     else {
@@ -566,6 +565,7 @@ public class MultiUserChatServiceImpl implements Component, MultiUserChatService
                             if (!allowedToCreate.includes(bareJID)) {
                                 // The user is not in the list of allowed JIDs to create a room so raise
                                 // an exception
+                                room.close();
                                 throw new NotAllowedException();
                             }
                         }
@@ -612,6 +612,7 @@ public class MultiUserChatServiceImpl implements Component, MultiUserChatService
                     }
                     catch (IllegalArgumentException e) {
                         // The room does not exist so do nothing
+                        room.close();
                         room = null;
                     }
                 }
@@ -625,7 +626,10 @@ public class MultiUserChatServiceImpl implements Component, MultiUserChatService
     }
 
     public void refreshChatRoom(String roomName) {
-        rooms.remove(roomName);
+        MUCRoom room = rooms.remove(roomName);
+        if (room != null) {
+            room.close();
+        }
         getChatRoom(roomName);
     }
 
@@ -669,6 +673,7 @@ public class MultiUserChatServiceImpl implements Component, MultiUserChatService
         MUCRoom room = rooms.remove(roomName);
         if (room != null) {
             totalChatTime += room.getChatLength();
+            room.close();
             if (notify) {
                 // Notify other cluster nodes that a room has been removed
                 CacheFactory.doClusterTask(new RoomRemovedEvent((LocalMUCRoom)room));

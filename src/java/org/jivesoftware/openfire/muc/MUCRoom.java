@@ -974,4 +974,10 @@ public interface MUCRoom extends Externalizable, Result {
      * @param packet The packet to send
      */
     public void send(Packet packet);
+
+    /**
+     * Closes this room and releases any resources associated with it (eg remove listeners)
+     */
+    public void close();
+
 }
