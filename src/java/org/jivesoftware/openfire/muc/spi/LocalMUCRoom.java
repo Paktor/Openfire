@@ -83,6 +83,7 @@ import org.jivesoftware.openfire.user.UserNotFoundException;
 import org.jivesoftware.util.JiveConstants;
 import org.jivesoftware.util.LocaleUtils;
 import org.jivesoftware.util.NotFoundException;
+import org.jivesoftware.util.TaskEngine;
 import org.jivesoftware.util.cache.CacheFactory;
 import org.jivesoftware.util.cache.ExternalizableUtil;
 import org.slf4j.Logger;
@@ -436,7 +437,12 @@ public class LocalMUCRoom implements MUCRoom, GroupEventListener {
             return;
         }
         this.emptyDate = emptyDate;
-        MUCPersistenceManager.updateRoomEmptyDate(this);
+        TaskEngine.getInstance().submit(new Runnable() {
+            @Override
+            public void run() {
+                MUCPersistenceManager.updateRoomEmptyDate(LocalMUCRoom.this);
+            }
+        });
     }
 
     public Date getEmptyDate() {

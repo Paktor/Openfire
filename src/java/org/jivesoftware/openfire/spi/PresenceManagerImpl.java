@@ -51,6 +51,7 @@ import org.jivesoftware.openfire.user.UserManager;
 import org.jivesoftware.openfire.user.UserNotFoundException;
 import org.jivesoftware.util.LocaleUtils;
 import org.jivesoftware.util.StringUtils;
+import org.jivesoftware.util.TaskEngine;
 import org.jivesoftware.util.cache.Cache;
 import org.jivesoftware.util.cache.CacheFactory;
 import org.slf4j.Logger;
@@ -192,7 +193,7 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
         // available. Only perform this operation if this is an available presence sent to
         // THE SERVER and the presence belongs to a local user.
         if (presence.getTo() == null && server.isLocal(presence.getFrom())) {
-            String username = presence.getFrom().getNode();
+            final String username = presence.getFrom().getNode();
             if (username == null || !userManager.isRegisteredUser(username)) {
                 // Ignore anonymous users
                 return;
@@ -204,7 +205,12 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
                 return;
             }
 
-            deleteOfflinePresenceFromDB(username);
+            TaskEngine.getInstance().submit(new Runnable() {
+                @Override
+                public void run() {
+                    deleteOfflinePresenceFromDB(username);
+                }
+            });
 
             // Remove data from cache.
             offlinePresenceCache.remove(username);
@@ -234,7 +240,7 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
         // offline if this is an unavailable presence sent to THE SERVER and the presence belongs
         // to a local user.
         if (presence.getTo() == null && server.isLocal(presence.getFrom())) {
-            String username = presence.getFrom().getNode();
+            final String username = presence.getFrom().getNode();
             if (username == null || !userManager.isRegisteredUser(username)) {
                 // Ignore anonymous users
                 return;
@@ -245,14 +251,17 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
                 return;
             }
 
-            String offlinePresence = null;
+            final String offlinePresence;
             // Save the last unavailable presence of this user if the presence contains any
             // child element such as <status>.
             if (!presence.getElement().elements().isEmpty()) {
                 offlinePresence = presence.toXML();
+            } else {
+                offlinePresence = null;
             }
+
             // Keep track of the time when the user went offline
-            java.util.Date offlinePresenceDate = new java.util.Date();
+            final java.util.Date offlinePresenceDate = new java.util.Date();
 
             boolean addedToCache;
             if (offlinePresence == null) {
@@ -271,7 +280,12 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
 
             lastActivityCache.put(username, offlinePresenceDate.getTime());
 
-            writeToDatabase(username, offlinePresence, offlinePresenceDate);
+            TaskEngine.getInstance().submit(new Runnable() {
+                @Override
+                public void run() {
+                    writeToDatabase(username, offlinePresence, offlinePresenceDate);
+                }
+            });
         }
     }
 
