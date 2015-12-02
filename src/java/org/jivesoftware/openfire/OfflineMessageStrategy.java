@@ -23,6 +23,7 @@ package org.jivesoftware.openfire;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.TimerTask;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.jivesoftware.openfire.container.BasicModule;
@@ -31,12 +32,12 @@ import org.jivesoftware.openfire.privacy.PrivacyList;
 import org.jivesoftware.openfire.privacy.PrivacyListManager;
 import org.jivesoftware.openfire.user.UserManager;
 import org.jivesoftware.util.JiveGlobals;
+import org.jivesoftware.util.TaskEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xmpp.packet.JID;
 import org.xmpp.packet.Message;
 import org.xmpp.packet.PacketError;
-import org.xmpp.packet.PacketExtension;
 
 /**
  * Controls what is done with offline messages.
@@ -196,14 +197,17 @@ public class OfflineMessageStrategy extends BasicModule implements ServerFeature
             }
         }
 
-        Long storeId = messageStore.addMessage(message);
+        OfflineMessageRecord record = messageStore.prepareMessage(message);
 
-        // Inform listeners that an offline message was stored
+        // Inform listeners that an offline message was scheduled (or not)
         if (!listeners.isEmpty()) {
             for (OfflineMessageListener listener : listeners) {
-                listener.messageStored(message, storeId);
+                listener.messageValidated(message, record != null);
             }
         }
+
+        int retries = JiveGlobals.getIntProperty("xmpp.offline.storeRetries", 5);
+        TaskEngine.getInstance().submit(new StoreMessageTask(record, retries));
     }
 
     private void bounce(Message message) {
@@ -293,5 +297,36 @@ public class OfflineMessageStrategy extends BasicModule implements ServerFeature
          * Messages are stored up to the storage limit, and then silently dropped.
          */
         store_and_drop
+    }
+
+    private class StoreMessageTask extends TimerTask {
+        private OfflineMessageRecord record;
+        private int attempt;
+
+        public StoreMessageTask(OfflineMessageRecord record, int attempt) {
+            this.record = record;
+            this.attempt = attempt;
+        }
+
+        @Override
+        public void run() {
+            try {
+                OfflineMessageRecord stored = messageStore.storeMessage(record);
+
+                // Inform listeners that an offline message was actually stored
+                if (!listeners.isEmpty()) {
+                    for (OfflineMessageListener listener : listeners) {
+                        listener.messageStored(stored);
+                    }
+                }
+            } catch (Exception e) {
+                Log.error("Unable to store offline message to {} with id {}, attempt #{}",
+                          record.getUsername(), record.getMessageId(), attempt, e);
+                if (attempt > 1) {
+                    long delay = JiveGlobals.getLongProperty("xmpp.offline.storeRetryDelay", 500);
+                    TaskEngine.getInstance().schedule(new StoreMessageTask(record, attempt - 1), delay);
+                }
+            }
+        }
     }
 }

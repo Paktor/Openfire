@@ -109,16 +109,14 @@ public class IQOfflineMessagesHandler extends IQHandler implements ServerFeature
                 }
                 if ("view".equals(item.attributeValue("action"))) {
                     // User requested to receive specific message
-                    OfflineMessage offlineMsg = messageStore.getMessage(from.getNode(), creationDate);
+                    OfflineMessage offlineMsg = messageStore.getMessage(from.getNode(), creationDate, false);
                     if (offlineMsg != null) {
                         sendOfflineMessage(from, offlineMsg);
                     }
                 }
                 else if ("remove".equals(item.attributeValue("action"))) {
                     // User requested to delete specific message
-                    if (messageStore.getMessage(from.getNode(), creationDate) != null) {
-                        messageStore.deleteMessage(from.getNode(), creationDate);
-                    } else {
+                    if (messageStore.getMessage(from.getNode(), creationDate, true) == null) {
                         // If the requester is authorized but the node does not exist, the server MUST return a <item-not-found/> error.
                         reply.setError(PacketError.Condition.item_not_found);
                     }
