@@ -290,14 +290,18 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
     }
 
     private void writeToDatabase(String username, String offlinePresence, Date offlinePresenceDate) {
-        // delete existing offline presence (if any)
-        deleteOfflinePresenceFromDB(username);
-
-        // Insert data into the database.
         Connection con = null;
         PreparedStatement pstmt = null;
         try {
             con = DbConnectionManager.getConnection();
+
+            // delete existing offline presence (if any)
+            pstmt = con.prepareStatement(DELETE_OFFLINE_PRESENCE);
+            pstmt.setString(1, username);
+            pstmt.execute();
+            DbConnectionManager.closeStatement(pstmt);
+
+            // Insert data into the database.
             pstmt = con.prepareStatement(INSERT_OFFLINE_PRESENCE);
             pstmt.setString(1, username);
             if (offlinePresence != null) {
@@ -308,7 +312,7 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
             pstmt.setString(3, StringUtils.dateToMillis(offlinePresenceDate));
             pstmt.execute();
         } catch (SQLIntegrityConstraintViolationException sqle) {
-            Log.warn("Error storing offline presence of user: " + username, sqle);
+            // do nothing, presence already stored
         } catch (SQLException sqle) {
             Log.error("Error storing offline presence of user: " + username, sqle);
         } finally {
@@ -355,7 +359,18 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
                 || item.getSubStatus() == RosterItem.SUB_BOTH;
     }
 
-    public void probePresence(JID prober, JID probee) {
+    public void probePresence(final JID prober, final JID probee) {
+        TaskEngine.getInstance().submit(new Runnable() {
+            @Override
+            public void run() {
+                // async sending out probe results, whole probe function is closed within one try-catch,
+                // no exceptions expected outside so let caller thread go further
+                internalProbePresence(prober, probee);
+            }
+        });
+    }
+
+    private void internalProbePresence(JID prober, JID probee) {
         try {
             if (server.isLocal(probee)) {
                 // Local probers should receive presences of probee in all connected resources

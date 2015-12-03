@@ -49,6 +49,7 @@ import org.jivesoftware.openfire.session.Session;
 import org.jivesoftware.openfire.user.UserManager;
 import org.jivesoftware.openfire.user.UserNotFoundException;
 import org.jivesoftware.util.LocaleUtils;
+import org.jivesoftware.util.TaskEngine;
 import org.jivesoftware.util.cache.Cache;
 import org.jivesoftware.util.cache.CacheFactory;
 import org.slf4j.Logger;
@@ -137,6 +138,19 @@ public class PresenceUpdateHandler extends BasicModule implements ChannelHandler
         process((Presence) packet, sessionManager.getSession(packet.getFrom()));
     }
 
+    private void backgroundBroadcastUpdate(final Presence presence, final boolean processDirectPresences) {
+        TaskEngine.getInstance().submit(new Runnable() {
+            @Override
+            public void run() {
+                // no need to copy one more time if processDirectPresences is false
+                broadcastUpdate(processDirectPresences ? presence.createCopy() : presence);
+                if (processDirectPresences) {
+                    broadcastUnavailableForDirectedPresences(presence);
+                }
+            }
+        });
+    }
+
     private void process(Presence presence, ClientSession session) throws UnauthorizedException, PacketException {
         try {
             Presence.Type type = presence.getType();
@@ -146,7 +160,7 @@ public class PresenceUpdateHandler extends BasicModule implements ChannelHandler
                     Log.warn("Rejected available presence: " + presence + " - " + session);
                     return;
                 }
-                broadcastUpdate(presence.createCopy());
+                backgroundBroadcastUpdate(presence.createCopy(), false);
                 if (session != null) {
                     session.setPresence(presence);
                     if (!session.isInitialized()) {
@@ -159,8 +173,7 @@ public class PresenceUpdateHandler extends BasicModule implements ChannelHandler
                 presenceManager.userAvailable(presence);
             }
             else if (Presence.Type.unavailable == type) {
-                broadcastUpdate(presence.createCopy());
-                broadcastUnavailableForDirectedPresences(presence);
+                backgroundBroadcastUpdate(presence.createCopy(), true);
                 if (session != null) {
                     session.setPresence(presence);
                 }
