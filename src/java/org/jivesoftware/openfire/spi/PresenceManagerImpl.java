@@ -20,6 +20,7 @@
 
 package org.jivesoftware.openfire.spi;
 
+import java.io.StringReader;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -27,11 +28,14 @@ import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.Types;
 import java.util.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.locks.Lock;
 
 import org.dom4j.Document;
-import org.dom4j.DocumentException;
 import org.dom4j.DocumentHelper;
+import org.dom4j.Element;
+import org.dom4j.io.SAXReader;
 import org.jivesoftware.database.DbConnectionManager;
 import org.jivesoftware.openfire.*;
 import org.jivesoftware.openfire.auth.UnauthorizedException;
@@ -59,6 +63,8 @@ import org.slf4j.LoggerFactory;
 import org.xmpp.packet.JID;
 import org.xmpp.packet.PacketError;
 import org.xmpp.packet.Presence;
+
+import static org.jivesoftware.util.JiveGlobals.getIntProperty;
 
 /**
  * Simple in memory implementation of the PresenceManager interface.
@@ -91,6 +97,11 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
 
     private Cache<String, Long> lastActivityCache;
     private Cache<String, String> offlinePresenceCache;
+
+    /**
+     * Pool of SAX Readers. SAXReader is not thread safe so we need to have a pool of readers.
+     */
+    private BlockingQueue<SAXReader> xmlReaders;
 
     public PresenceManagerImpl() {
         super("Presence manager");
@@ -151,13 +162,20 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
                 return null;
             }
             // Otherwise, parse out the status from the XML.
+            SAXReader xmlReader = null;
             try {
+                xmlReader = xmlReaders.take();
                 // Parse the element
-                Document element = DocumentHelper.parseText(presenceXML);
-                presenceStatus = element.getRootElement().elementTextTrim("status");
+                Element element = xmlReader.read(new StringReader(presenceXML)).getRootElement();
+                presenceStatus = element.elementTextTrim("status");
             }
-            catch (DocumentException e) {
+            catch (Exception e) {
                 Log.error(LocaleUtils.getLocalizedString("admin.error"), e);
+            }
+            finally {
+                if (xmlReader != null) {
+                    xmlReaders.add(xmlReader);
+                }
             }
         }
         return presenceStatus;
@@ -556,11 +574,18 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
     @Override
 	public void start() throws IllegalStateException {
         super.start();
+        // Initialize the pool of sax readers
+        int poolSize = getIntProperty("xmpp.presence.managerSaxPoolSize", 50);
+        xmlReaders = new LinkedBlockingQueue<>(poolSize);
+        for (int i = 0; i < poolSize; i++) {
+            SAXReader xmlReader = new SAXReader();
+            xmlReader.setEncoding("UTF-8");
+            xmlReaders.add(xmlReader);
+        }
         // Use component manager for Presence Updates.
         componentManager = InternalComponentManager.getInstance();
         // Listen for user deletion events
         UserEventDispatcher.addListener(this);
-
     }
 
     @Override
@@ -568,6 +593,8 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
         // Clear the caches when stopping the module.
         offlinePresenceCache.clear();
         lastActivityCache.clear();
+        // Clean up the pool of sax readers
+        xmlReaders.clear();
         // Stop listening for user deletion events
         UserEventDispatcher.removeListener(this);
     }

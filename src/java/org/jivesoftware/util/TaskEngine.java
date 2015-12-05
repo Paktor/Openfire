@@ -19,12 +19,20 @@
 
 package org.jivesoftware.util;
 
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.MetricRegistry;
+import org.jivesoftware.util.metric.MetricRegistryFactory;
+
 import java.util.Date;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static com.codahale.metrics.MetricRegistry.name;
+import static org.jivesoftware.util.JiveGlobals.getIntProperty;
 
 /**
  * Performs tasks using worker threads. It also allows tasks to be scheduled to be
@@ -52,14 +60,17 @@ public class TaskEngine {
     private Timer timer;
     private ExecutorService executor;
     private Map<TimerTask, TimerTaskWrapper> wrappedTasks = new ConcurrentHashMap<TimerTask, TimerTaskWrapper>();
+    private Histogram waitInTheQueueHistogram;
 
     /**
      * Constructs a new task engine.
      */
     private TaskEngine() {
         timer = new Timer("TaskEngine-timer", true);
-        executor = Executors.newCachedThreadPool(new ThreadFactory() {
 
+        int nThreads = getIntProperty("xmpp.client.processing.threads", 16) * 4; // incoming connections * 4
+
+        ThreadFactory factory = new ThreadFactory() {
             final AtomicInteger threadNumber = new AtomicInteger(1);
 
             public Thread newThread(Runnable runnable) {
@@ -73,7 +84,21 @@ public class TaskEngine {
                 }
                 return thread;
             }
+        };
+
+        executor = new ThreadPoolExecutor(nThreads, nThreads,
+                                          10, TimeUnit.MINUTES,
+                                          new LinkedBlockingQueue<Runnable>(),
+                                          factory);
+
+        MetricRegistry metricRegistry = MetricRegistryFactory.getMetricRegistry();
+        metricRegistry.register(name("TaskEngine", "executorQueue"), new Gauge<Integer>() {
+            @Override
+            public Integer getValue() {
+                return ((ThreadPoolExecutor) executor).getQueue().size();
+            }
         });
+        waitInTheQueueHistogram = metricRegistry.histogram(name("TaskEngine", "executorWait"));
     }
 
     /**
@@ -88,8 +113,8 @@ public class TaskEngine {
      *      for execution.
      * @throws NullPointerException if task null.
      */
-    public Future<?> submit(Runnable task) {
-        return executor.submit(task);
+    public Future<?> submit(final Runnable task) {
+        return executor.submit(new WaitMonitorTaskWrapper(task));
     }
 
     /**
@@ -305,7 +330,25 @@ public class TaskEngine {
 
         @Override
 		public void run() {
-            executor.submit(task);
+            executor.submit(new WaitMonitorTaskWrapper(task));
+        }
+    }
+
+    /**
+     * Wrapper class for monitoring a time spent in the queue before actual execution
+     */
+    private class WaitMonitorTaskWrapper implements Runnable {
+        private long start = System.currentTimeMillis();
+        private Runnable target;
+
+        public WaitMonitorTaskWrapper(Runnable target) {
+            this.target = target;
+        }
+
+        @Override
+		public void run() {
+            waitInTheQueueHistogram.update(System.currentTimeMillis() - start);
+            target.run();
         }
     }
 }
