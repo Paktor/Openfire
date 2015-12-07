@@ -19,8 +19,15 @@
  */
 package org.jivesoftware.openfire.stats;
 
-import java.util.*;
+import com.codahale.metrics.Gauge;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static com.codahale.metrics.MetricRegistry.name;
+import static org.jivesoftware.util.metric.MetricRegistryFactory.getMetricRegistry;
 
 /**
  * Stores statistics being tracked by the server.
@@ -38,7 +45,6 @@ public class StatisticsManager {
     private final Map<String, String> keyToGroupMap = new ConcurrentHashMap<String, String>();
 
     private StatisticsManager() {
-        
     }
 
     /**
@@ -47,8 +53,15 @@ public class StatisticsManager {
      * @param statKey the statistic key.
      * @param definition the statistic to be tracked.
      */
-    public void addStatistic(String statKey, Statistic definition) {
+    public void addStatistic(String statKey, final Statistic definition) {
         statistics.put(statKey, definition);
+        getMetricRegistry().register(
+                name(StatisticsManager.class.getSimpleName(), statKey), new Gauge<Integer>() {
+                    @Override
+                    public Integer getValue() {
+                        return (int) definition.sample();
+                    }
+                });
     }
 
     /**
@@ -95,6 +108,7 @@ public class StatisticsManager {
      */
     public void removeStatistic(String statKey) {
         statistics.remove(statKey);
+        getMetricRegistry().remove(name(StatisticsManager.class.getSimpleName(), statKey));
     }
 
 }
