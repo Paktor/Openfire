@@ -431,7 +431,7 @@ public class CacheFactory {
             // always produces new LocalLock but backed with same ReentrantLock and synced only by key
             // (DefaultLocalCacheStrategy uses String.intern before sync by key, 'intern' is effectively thread safe)
         	return localCacheFactoryStrategy.getLock(key, cache);
-        } else synchronized (CacheFactory.class) { // leave sync for cluster mode just in case
+        } else {
         	return cacheFactoryStrategy.getLock(key, cache);
         }
     }

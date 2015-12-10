@@ -29,6 +29,7 @@ import org.jivesoftware.openfire.interceptor.PacketRejectedException;
 import org.jivesoftware.openfire.session.ClientSession;
 import org.jivesoftware.openfire.session.Session;
 import org.jivesoftware.util.LocaleUtils;
+import org.jivesoftware.util.TaskEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xmpp.packet.JID;
@@ -114,9 +115,9 @@ public class PresenceRouter extends BasicModule {
         }
     }
 
-    private void handle(Presence packet) {
-        JID recipientJID = packet.getTo();
-        JID senderJID = packet.getFrom();
+    private void handle(final Presence packet) {
+        final JID recipientJID = packet.getTo();
+        final JID senderJID = packet.getFrom();
         // Check if the packet was sent to the server hostname
         if (recipientJID != null && recipientJID.getNode() == null &&
                 recipientJID.getResource() == null && serverName.equals(recipientJID.getDomain())) {
@@ -163,9 +164,14 @@ public class PresenceRouter extends BasicModule {
 
                     // The user sent a directed presence to an entity
                     // Broadcast it to all connected resources
-                    for (JID jid : routingTable.getRoutes(recipientJID, senderJID)) {
+                    for (final JID jid : routingTable.getRoutes(recipientJID, senderJID)) {
                         // Register the sent directed presence
-                        updateHandler.directedPresenceSent(packet, jid, recipientJID.toString());
+                        TaskEngine.getInstance().submit(new Runnable() {
+                            @Override
+                            public void run() {
+                                updateHandler.directedPresenceSent(packet, jid, recipientJID.toString());
+                            }
+                        });
                         // Route the packet
                         routingTable.routePacket(jid, packet, false);
                     }
