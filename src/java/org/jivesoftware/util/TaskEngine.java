@@ -23,6 +23,8 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import org.jivesoftware.util.metric.MetricRegistryFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Date;
 import java.util.Map;
@@ -45,6 +47,7 @@ import static org.jivesoftware.util.JiveGlobals.getIntProperty;
  * @author Matt Tucker
  */
 public class TaskEngine {
+    private static final Logger Log = LoggerFactory.getLogger(TaskEngine.class);
 
     private static TaskEngine instance = new TaskEngine();
 
@@ -68,7 +71,11 @@ public class TaskEngine {
     private TaskEngine() {
         timer = new Timer("TaskEngine-timer", true);
 
-        int nThreads = getIntProperty("xmpp.client.processing.threads", 16) * 4; // incoming connections * 4
+        int nThreads = getIntProperty("xmpp.client.processing.threads", 16) * 2; // incoming connections * 2
+        nThreads = getIntProperty("xmpp.server.background.threads", nThreads);   // to override ..processing.threads
+        int keepAlive = getIntProperty("xmpp.server.background.keepAlive", 600); // in seconds
+
+        Log.info("TaskEngine was initialized with {} threads, keep alive is set to {} seconds", nThreads, keepAlive);
 
         ThreadFactory factory = new ThreadFactory() {
             final AtomicInteger threadNumber = new AtomicInteger(1);
@@ -87,7 +94,7 @@ public class TaskEngine {
         };
 
         executor = new ThreadPoolExecutor(nThreads, nThreads,
-                                          10, TimeUnit.MINUTES,
+                                          keepAlive, TimeUnit.SECONDS,
                                           new LinkedBlockingQueue<Runnable>(),
                                           factory);
 

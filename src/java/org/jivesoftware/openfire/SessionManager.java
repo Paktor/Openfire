@@ -71,6 +71,7 @@ import org.jivesoftware.openfire.user.UserNotFoundException;
 import org.jivesoftware.util.JiveGlobals;
 import org.jivesoftware.util.LocaleUtils;
 import org.jivesoftware.util.Log;
+import org.jivesoftware.util.TaskEngine;
 import org.jivesoftware.util.cache.Cache;
 import org.jivesoftware.util.cache.CacheFactory;
 import org.slf4j.Logger;
@@ -1097,7 +1098,7 @@ public class SessionManager extends BasicModule implements ClusterEventListener/
      * @param forceUnavailable true if an unavailable presence must be created and routed.
      * @return true if the requested session was successfully removed.
      */
-    public boolean removeSession(ClientSession session, JID fullJID, boolean anonymous, boolean forceUnavailable) {
+    public boolean removeSession(ClientSession session, final JID fullJID, boolean anonymous, boolean forceUnavailable) {
         // Do nothing if server is shutting down. Note: When the server
         // is shutting down the serverName will be null.
         if (serverName == null) {
@@ -1128,11 +1129,16 @@ public class SessionManager extends BasicModule implements ClusterEventListener/
                 localSessionManager.getPreAuthenticatedSessions().remove(fullJID.getResource()) != null;
         // If the user is still available then send an unavailable presence
         if (forceUnavailable || session.getPresence().isAvailable()) {
-            Presence offline = new Presence();
-            offline.setFrom(fullJID);
-            offline.setTo(new JID(null, serverName, null, true));
-            offline.setType(Presence.Type.unavailable);
-            router.route(offline);
+            TaskEngine.getInstance().submit(new Runnable() {
+                @Override
+                public void run() {
+                    Presence offline = new Presence();
+                    offline.setFrom(fullJID);
+                    offline.setTo(new JID(null, serverName, null, true));
+                    offline.setType(Presence.Type.unavailable);
+                    router.route(offline);
+                }
+            });
         }
 
         // Stop tracking information about the session and share it with other cluster nodes

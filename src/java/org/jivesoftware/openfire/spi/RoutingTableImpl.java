@@ -794,28 +794,31 @@ public class RoutingTableImpl extends BasicModule implements RoutingTable, Clust
                 }
             }
             else {
+                Collection<String> sessions;
                 // Address is a bare JID so return all AVAILABLE resources of user
                 Lock lock = CacheFactory.getLock(route.toBareJID(), usersSessions);
                 try {
                     lock.lock(); // temporarily block new sessions for this JID
-	                Collection<String> sessions = usersSessions.get(route.toBareJID());
-	                if (sessions != null) {
-	                    // Select only available sessions
-	                    for (String jid : sessions) {
-	                        ClientRoute clientRoute = usersCache.get(jid);
-	                        if (clientRoute == null) {
-	                            clientRoute = anonymousUsersCache.get(jid);
-	                        }
-	                        if (clientRoute != null && (clientRoute.isAvailable() ||
-	                                presenceUpdateHandler.hasDirectPresence(new JID(jid), requester))) {
-	                            jids.add(new JID(jid));
-	                        }
-	                    }
-	                }
+	                sessions = usersSessions.get(route.toBareJID());
+                    // copy list content to release lock ASAP
+                    sessions = (sessions != null) ? new ArrayList<String>(sessions) : Collections.<String>emptyList();
                 }
                 finally {
                 	lock.unlock();
                 }
+
+                // Select only available sessions
+                for (String jid : sessions) {
+                    ClientRoute clientRoute = usersCache.get(jid);
+                    if (clientRoute == null) {
+                        clientRoute = anonymousUsersCache.get(jid);
+                    }
+                    if (clientRoute != null && (clientRoute.isAvailable() ||
+                            presenceUpdateHandler.hasDirectPresence(new JID(jid), requester))) {
+                        jids.add(new JID(jid));
+                    }
+                }
+
             }
         }
         else if (route.getDomain().contains(serverName)) {

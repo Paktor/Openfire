@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.TimerTask;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.MetricRegistry;
 import org.jivesoftware.openfire.container.BasicModule;
 import org.jivesoftware.openfire.disco.ServerFeaturesProvider;
 import org.jivesoftware.openfire.privacy.PrivacyList;
@@ -33,11 +35,14 @@ import org.jivesoftware.openfire.privacy.PrivacyListManager;
 import org.jivesoftware.openfire.user.UserManager;
 import org.jivesoftware.util.JiveGlobals;
 import org.jivesoftware.util.TaskEngine;
+import org.jivesoftware.util.metric.MetricRegistryFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xmpp.packet.JID;
 import org.xmpp.packet.Message;
 import org.xmpp.packet.PacketError;
+
+import static com.codahale.metrics.MetricRegistry.name;
 
 /**
  * Controls what is done with offline messages.
@@ -56,6 +61,8 @@ public class OfflineMessageStrategy extends BasicModule implements ServerFeature
     private OfflineMessageStore messageStore;
     private JID serverAddress;
     private PacketRouter router;
+
+    private Meter messagesStoredMeter;
 
     public OfflineMessageStrategy() {
         super("Offline Message Strategy");
@@ -82,7 +89,18 @@ public class OfflineMessageStrategy extends BasicModule implements ServerFeature
         JiveGlobals.setProperty("xmpp.offline.type", type.toString());
     }
 
-    public void storeOffline(Message message) {
+    public void storeOffline(final Message message) {
+        if (message != null) {
+            TaskEngine.getInstance().submit(new Runnable() {
+                @Override
+                public void run() {
+                    storeOfflineInternal(message);
+                }
+            });
+        }
+    }
+
+    public void storeOfflineInternal(Message message) {
         if (message != null) {
             // Do nothing if the message was sent to the server itself, an anonymous user or a non-existent user
         	// Also ignore message carbons
@@ -254,6 +272,9 @@ public class OfflineMessageStrategy extends BasicModule implements ServerFeature
         if (type != null && type.length() > 0) {
             OfflineMessageStrategy.type = Type.valueOf(type);
         }
+
+        MetricRegistry metricRegistry = MetricRegistryFactory.getMetricRegistry();
+        messagesStoredMeter = metricRegistry.meter(name("OfflineMessageStrategy", "stored"));
     }
 
     @Override
@@ -312,7 +333,7 @@ public class OfflineMessageStrategy extends BasicModule implements ServerFeature
         public void run() {
             try {
                 OfflineMessageRecord stored = messageStore.storeMessage(record);
-
+                messagesStoredMeter.mark();
                 // Inform listeners that an offline message was actually stored
                 if (!listeners.isEmpty()) {
                     for (OfflineMessageListener listener : listeners) {
