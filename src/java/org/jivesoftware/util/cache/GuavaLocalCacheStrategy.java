@@ -34,6 +34,9 @@ public class GuavaLocalCacheStrategy extends DefaultLocalCacheStrategy {
 
     @Override
     public Lock getLock(Object key, Cache cache) {
+        if (key instanceof String && cache != null) {
+            key = cache.getName() + key; // to lock specific cache not server-wide lock
+        }
         // use striped weak locks instead of default String.intern based locks
         return stripedLocks.get(key);
     }

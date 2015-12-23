@@ -22,6 +22,7 @@ import org.jivesoftware.util.cache.CacheFactory;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.locks.Lock;
 
 /**
  * A Privacy list manager creates, gets, updates and removes privacy lists. Loaded lists
@@ -150,7 +151,9 @@ public class PrivacyListManager {
         String cacheKey = getDefaultCacheKey(username);
         PrivacyList list = listsCache.get(cacheKey);
         if (list == null) {
-            synchronized (username.intern()) {
+            Lock lock = CacheFactory.getLock(username, listsCache);
+            try {
+                lock.lock();
                 list = listsCache.get(cacheKey);
                 if (list == null) {
                     // Load default list from the database
@@ -159,6 +162,8 @@ public class PrivacyListManager {
                         listsCache.put(cacheKey, list);
                     }
                 }
+            } finally {
+                lock.unlock();
             }
         }
         return list;
