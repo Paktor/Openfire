@@ -5,6 +5,8 @@ import org.jivesoftware.util.JiveGlobals;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.locks.Lock;
 
 /**
@@ -41,4 +43,21 @@ public class GuavaLocalCacheStrategy extends DefaultLocalCacheStrategy {
         return stripedLocks.get(key);
     }
 
+    @Override
+    public void doClusterTask(ClusterTask task) {
+    }
+
+    @Override
+    public void doClusterTask(ClusterTask task, byte[] nodeID) {
+    }
+
+    @Override
+    public Collection<Object> doSynchronousClusterTask(ClusterTask task, boolean includeLocalMember) {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public Object doSynchronousClusterTask(ClusterTask task, byte[] nodeID) {
+        return null;
+    }
 }

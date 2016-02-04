@@ -224,8 +224,10 @@ public class OfflineMessageStrategy extends BasicModule implements ServerFeature
             }
         }
 
-        int retries = JiveGlobals.getIntProperty("xmpp.offline.storeRetries", 5);
-        TaskEngine.getInstance().submit(new StoreMessageTask(record, retries));
+        if (record != null) {
+            int retries = JiveGlobals.getIntProperty("xmpp.offline.storeRetries", 5);
+            TaskEngine.getInstance().submit(new StoreMessageTask(record, retries));
+        }
     }
 
     private void bounce(Message message) {

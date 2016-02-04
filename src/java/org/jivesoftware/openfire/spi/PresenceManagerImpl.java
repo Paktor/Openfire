@@ -84,6 +84,7 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
 
     private static final String NULL_STRING = "NULL";
     private static final long NULL_LONG = -1L;
+    private static int RETRIES = 3;
 
     private RoutingTable routingTable;
     private SessionManager sessionManager;
@@ -301,13 +302,13 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
             TaskEngine.getInstance().submit(new Runnable() {
                 @Override
                 public void run() {
-                    writeToDatabase(username, offlinePresence, offlinePresenceDate);
+                    writeToDatabase(username, offlinePresence, offlinePresenceDate, 1);
                 }
             });
         }
     }
 
-    private void writeToDatabase(String username, String offlinePresence, Date offlinePresenceDate) {
+    private void writeToDatabase(final String username, final String offlinePresence, final Date offlinePresenceDate, final int retry) {
         Connection con = null;
         PreparedStatement pstmt = null;
         try {
@@ -331,8 +332,20 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
             pstmt.execute();
         } catch (SQLIntegrityConstraintViolationException sqle) {
             // do nothing, presence already stored
+
         } catch (SQLException sqle) {
-            Log.error("Error storing offline presence of user: " + username, sqle);
+
+            if (retry < RETRIES) { // lets try one more time
+                TaskEngine.getInstance().submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        writeToDatabase(username, offlinePresence, offlinePresenceDate, retry + 1);
+                    }
+                });
+            } else {
+                Log.error("Error storing offline presence '{}', [{}] of the user {}, attempt #{}",
+                          offlinePresence, offlinePresenceDate, username, retry, sqle);
+            }
         } finally {
             DbConnectionManager.closeConnection(pstmt, con);
         }
@@ -649,7 +662,7 @@ public class PresenceManagerImpl extends BasicModule implements PresenceManager,
         for (ClientSession session : XMPPServer.getInstance().getSessionManager().getSessions()) {
             if (!session.isAnonymousUser()) {
                 try {
-                    writeToDatabase(session.getUsername(), null, new Date());
+                    writeToDatabase(session.getUsername(), null, new Date(), RETRIES); // no retry
                 } catch (UserNotFoundException e) {
                     Log.error(e.getMessage(), e);
                 }

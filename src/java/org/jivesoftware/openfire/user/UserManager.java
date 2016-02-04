@@ -28,6 +28,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.locks.Lock;
 
 import org.dom4j.Element;
 import org.jivesoftware.openfire.XMPPServer;
@@ -234,12 +235,17 @@ public class UserManager implements IQResultListener {
         username = username.trim().toLowerCase();
         User user = userCache.get(username);
         if (user == null) {
-            synchronized (username.intern()) {
+            Lock lock = CacheFactory.getLock(username, userCache);
+            try {
+                lock.lock();
                 user = userCache.get(username);
                 if (user == null) {
                     user = provider.loadUser(username);
                     userCache.put(username, user);
                 }
+
+            } finally {
+                lock.unlock();
             }
         }
         return user;

@@ -28,18 +28,19 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Date;
 import java.util.Map;
-import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.codahale.metrics.MetricRegistry.name;
+import static java.lang.System.currentTimeMillis;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.jivesoftware.util.JiveGlobals.getIntProperty;
 
 /**
  * Performs tasks using worker threads. It also allows tasks to be scheduled to be
  * run at future dates. This class mimics relevant methods in both
- * {@link ExecutorService} and {@link Timer}. Any {@link TimerTask} that's
+ * {@link ExecutorService} and {@link ScheduledExecutorService}. Any {@link TimerTask} that's
  * scheduled to be run in the future will automatically be run using the thread
  * executor's thread pool. This means that the standard restriction that TimerTasks
  * should run quickly does not apply.
@@ -47,7 +48,7 @@ import static org.jivesoftware.util.JiveGlobals.getIntProperty;
  * @author Matt Tucker
  */
 public class TaskEngine {
-    private static final Logger Log = LoggerFactory.getLogger(TaskEngine.class);
+    private final Logger Log = LoggerFactory.getLogger(TaskEngine.class);
 
     private static TaskEngine instance = new TaskEngine();
 
@@ -60,52 +61,52 @@ public class TaskEngine {
         return instance;
     }
 
-    private Timer timer;
+    private ScheduledExecutorService scheduledExecutor;
     private ExecutorService executor;
-    private Map<TimerTask, TimerTaskWrapper> wrappedTasks = new ConcurrentHashMap<TimerTask, TimerTaskWrapper>();
+    private Map<TimerTask, ScheduledFuture> futureMap = new ConcurrentHashMap<TimerTask, ScheduledFuture>();
     private Histogram waitInTheQueueHistogram;
 
     /**
      * Constructs a new task engine.
      */
     private TaskEngine() {
-        timer = new Timer("TaskEngine-timer", true);
-
         int nThreads = getIntProperty("xmpp.client.processing.threads", 16) * 2; // incoming connections * 2
         nThreads = getIntProperty("xmpp.server.background.threads", nThreads);   // to override ..processing.threads
         int keepAlive = getIntProperty("xmpp.server.background.keepAlive", 600); // in seconds
 
-        Log.info("TaskEngine was initialized with {} threads, keep alive is set to {} seconds", nThreads, keepAlive);
-
-        ThreadFactory factory = new ThreadFactory() {
-            final AtomicInteger threadNumber = new AtomicInteger(1);
-
-            public Thread newThread(Runnable runnable) {
-                // Use our own naming scheme for the threads.
-                Thread thread = new Thread(Thread.currentThread().getThreadGroup(), runnable,
-                                      "TaskEngine-pool-" + threadNumber.getAndIncrement(), 0);
-                // Make workers daemon threads.
-                thread.setDaemon(true);
-                if (thread.getPriority() != Thread.NORM_PRIORITY) {
-                    thread.setPriority(Thread.NORM_PRIORITY);
-                }
-                return thread;
-            }
-        };
+        int scheduledThreads = getIntProperty("xmpp.client.processing.scheduled", 30);
 
         executor = new ThreadPoolExecutor(nThreads, nThreads,
                                           keepAlive, TimeUnit.SECONDS,
                                           new LinkedBlockingQueue<Runnable>(),
-                                          factory);
+                                          new TaskThreadFactory("TaskEngine-pool-"));
+
+        scheduledExecutor = new ScheduledThreadPoolExecutor(scheduledThreads,
+                                                            new TaskThreadFactory("TaskEngine-scheduler-"));
 
         MetricRegistry metricRegistry = MetricRegistryFactory.getMetricRegistry();
+
+        // monitor queues size
         metricRegistry.register(name("TaskEngine", "executorQueue"), new Gauge<Integer>() {
             @Override
             public Integer getValue() {
                 return ((ThreadPoolExecutor) executor).getQueue().size();
             }
         });
+
+        metricRegistry.register(name("TaskEngine", "scheduledQueue"), new Gauge<Integer>() {
+            @Override
+            public Integer getValue() {
+                return ((ThreadPoolExecutor) scheduledExecutor).getQueue().size();
+            }
+        });
+
+        // wait time in the queue for regular one run tasks
         waitInTheQueueHistogram = metricRegistry.histogram(name("TaskEngine", "executorWait"));
+
+        Log.info("TaskEngine was initialized with {} threads, keep alive is set to {} seconds. " +
+                         "Scheduled threads amount was set to {}", nThreads, keepAlive, scheduledThreads);
+
     }
 
     /**
@@ -135,7 +136,7 @@ public class TaskEngine {
      *         cancelled, or timer was cancelled.
      */
     public void schedule(TimerTask task, long delay) {
-        timer.schedule(new TimerTaskWrapper(task), delay);
+        scheduledExecutor.schedule(new TimerTaskWrapper(task), delay, MILLISECONDS);
     }
 
     /**
@@ -149,7 +150,8 @@ public class TaskEngine {
      *         cancelled, timer was cancelled, or timer thread terminated.
      */
     public void schedule(TimerTask task, Date time) {
-        timer.schedule(new TimerTaskWrapper(task), time);
+        scheduledExecutor.schedule(new TimerTaskWrapper(task),
+                                   time.getTime() - currentTimeMillis(), MILLISECONDS);
     }
 
     /**
@@ -183,9 +185,9 @@ public class TaskEngine {
      *         cancelled, timer was cancelled, or timer thread terminated.
      */
     public void schedule(TimerTask task, long delay, long period) {
-        TimerTaskWrapper taskWrapper = new TimerTaskWrapper(task);
-        wrappedTasks.put(task, taskWrapper);
-        timer.schedule(taskWrapper, delay, period);
+        ScheduledFuture<?> future = scheduledExecutor.scheduleAtFixedRate(
+                new TimerTaskWrapper(task), delay, period, MILLISECONDS);
+        futureMap.put(task, future);
     }
 
     /**
@@ -218,9 +220,9 @@ public class TaskEngine {
      *         cancelled, timer was cancelled, or timer thread terminated.
      */
     public void schedule(TimerTask task, Date firstTime, long period) {
-        TimerTaskWrapper taskWrapper = new TimerTaskWrapper(task);
-        wrappedTasks.put(task, taskWrapper);
-        timer.schedule(taskWrapper, firstTime, period);
+        ScheduledFuture<?> future = scheduledExecutor.scheduleAtFixedRate(
+                new TimerTaskWrapper(task), firstTime.getTime() - currentTimeMillis(), period, MILLISECONDS);
+        futureMap.put(task, future);
     }
 
     /**
@@ -255,9 +257,7 @@ public class TaskEngine {
      *         cancelled, timer was cancelled, or timer thread terminated.
      */
     public void scheduleAtFixedRate(TimerTask task, long delay, long period) {
-        TimerTaskWrapper taskWrapper = new TimerTaskWrapper(task);
-        wrappedTasks.put(task, taskWrapper);
-        timer.scheduleAtFixedRate(taskWrapper, delay, period);
+        schedule(task, delay, period);
     }
 
     /**
@@ -291,9 +291,7 @@ public class TaskEngine {
      *         cancelled, timer was cancelled, or timer thread terminated.
      */
     public void scheduleAtFixedRate(TimerTask task, Date firstTime, long period) {
-        TimerTaskWrapper taskWrapper = new TimerTaskWrapper(task);
-        wrappedTasks.put(task, taskWrapper);
-        timer.scheduleAtFixedRate(taskWrapper, firstTime, period);
+        schedule(task, firstTime, period);
     }
 
     /**
@@ -302,9 +300,9 @@ public class TaskEngine {
      * @param task the scheduled task to cancel.
      */
     public void cancelScheduledTask(TimerTask task) {
-        TaskEngine.TimerTaskWrapper taskWrapper = wrappedTasks.remove(task);
-        if (taskWrapper != null) {
-            taskWrapper.cancel();
+        ScheduledFuture<?> future = futureMap.remove(task);
+        if (future != null) {
+            future.cancel(false);
         }
     }
 
@@ -317,9 +315,9 @@ public class TaskEngine {
             executor = null;
         }
 
-        if (timer != null) {
-            timer.cancel();
-            timer = null;
+        if (scheduledExecutor != null) {
+            scheduledExecutor.shutdown();
+            scheduledExecutor = null;
         }
     }
 
@@ -337,7 +335,12 @@ public class TaskEngine {
 
         @Override
 		public void run() {
-            executor.submit(new WaitMonitorTaskWrapper(task));
+            try {
+                task.run();
+            } catch (Exception e) {
+                // swallow error to do not prevent future scheduled task execution (scheduler will freeze it otherwise)
+                Log.error("Unhandled exception in scheduled {}", task.getClass().getName(), e);
+            }
         }
     }
 
@@ -345,7 +348,7 @@ public class TaskEngine {
      * Wrapper class for monitoring a time spent in the queue before actual execution
      */
     private class WaitMonitorTaskWrapper implements Runnable {
-        private long start = System.currentTimeMillis();
+        private long start = currentTimeMillis();
         private Runnable target;
 
         public WaitMonitorTaskWrapper(Runnable target) {
@@ -354,8 +357,34 @@ public class TaskEngine {
 
         @Override
 		public void run() {
-            waitInTheQueueHistogram.update(System.currentTimeMillis() - start);
-            target.run();
+            try {
+                waitInTheQueueHistogram.update(currentTimeMillis() - start);
+                target.run();
+            } catch (Exception e) {
+                Log.error("Unhandled exception in {}", target.getClass().getName(), e);
+            }
         }
     }
+
+    public static class TaskThreadFactory implements ThreadFactory {
+        private final String prefix;
+        private final AtomicInteger threadNumber = new AtomicInteger(1);
+
+        public TaskThreadFactory(String prefix) {
+            this.prefix = prefix;
+        }
+
+        public Thread newThread(Runnable runnable) {
+            // Use our own naming scheme for the threads.
+            Thread thread = new Thread(Thread.currentThread().getThreadGroup(), runnable,
+                                       prefix + threadNumber.getAndIncrement(), 0);
+            // Make workers daemon threads.
+            thread.setDaemon(true);
+            if (thread.getPriority() != Thread.NORM_PRIORITY) {
+                thread.setPriority(Thread.NORM_PRIORITY);
+            }
+            return thread;
+        }
+    };
+
 }
