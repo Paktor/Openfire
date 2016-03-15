@@ -178,6 +178,7 @@ public class MUCPersistenceManager {
         try {
             Long serviceID = XMPPServer.getInstance().getMultiUserChatManager().getMultiUserChatServiceID(room.getMUCService().getServiceName());
             con = DbConnectionManager.getConnection();
+            con.setReadOnly(true);
             pstmt = con.prepareStatement(LOAD_ROOM);
             pstmt.setLong(1, serviceID);
             pstmt.setString(2, room.getName());
@@ -476,6 +477,7 @@ public class MUCPersistenceManager {
         ResultSet resultSet = null;
         try {
             connection = DbConnectionManager.getConnection();
+            connection.setReadOnly(true);
             statement = connection.prepareStatement(LOAD_ALL_ROOMS);
             statement.setLong(1, serviceID);
             statement.setString(2, StringUtils.dateToMillis(emptyDate));
@@ -543,6 +545,7 @@ public class MUCPersistenceManager {
         ResultSet resultSet = null;
         try {
             connection = DbConnectionManager.getConnection();
+            connection.setReadOnly(true);
             statement = connection.prepareStatement(LOAD_ALL_HISTORY);
 
             // Reload the history, using "muc.history.reload.limit" (days) if present
@@ -602,6 +605,7 @@ public class MUCPersistenceManager {
         ResultSet resultSet = null;
         try {
             connection = DbConnectionManager.getConnection();
+            connection.setReadOnly(true);
             statement = connection.prepareStatement(LOAD_ALL_AFFILIATIONS);
             statement.setLong(1, serviceID);
             resultSet = statement.executeQuery();
@@ -668,6 +672,7 @@ public class MUCPersistenceManager {
         JID affiliationJID = null;
         try {
             connection = DbConnectionManager.getConnection();
+            connection.setReadOnly(true);
             statement = connection.prepareStatement(LOAD_ALL_MEMBERS);
             statement.setLong(1, serviceID);
             resultSet = statement.executeQuery();
