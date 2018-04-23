@@ -137,7 +137,7 @@ public class MessageRouter extends BasicModule {
                         // Deliver stanza to requested route
                         routingTable.routePacket(recipientJID, packet, false);
                     } catch (Exception e) {
-                        log.error("Failed to route packet: " + packet.toXML(), e);
+                        log.error("Failed to route packet: {}", packet, e);
                         routingFailed(recipientJID, packet);
                     }
 
@@ -175,6 +175,9 @@ public class MessageRouter extends BasicModule {
             // Invoke the interceptors after we have processed the read packet
             InterceptorManager.getInstance().invokeInterceptors(packet, session, true, true);
         } catch (PacketRejectedException e) {
+
+            log.warn("REJECTED {}", packet, e);
+
             // An interceptor rejected this packet
             if (session != null && e.getRejectionMessage() != null && e.getRejectionMessage().trim().length() > 0) {
                 // A message for the rejection will be sent to the sender of the rejected packet
