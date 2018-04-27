@@ -4,6 +4,9 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Slf4jReporter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.bridge.SLF4JBridgeHandler;
+
+import java.util.logging.Level;
 
 import static com.codahale.metrics.Slf4jReporter.forRegistry;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -25,8 +28,13 @@ public class MetricRegistryFactory {
                 .convertRatesTo(SECONDS)
                 .convertDurationsTo(MILLISECONDS)
                 .build();
-        reporter.start(60, MINUTES);
-    }
+        reporter.start(5, MINUTES);
+
+        // jul reset
+        SLF4JBridgeHandler.removeHandlersForRootLogger();
+        SLF4JBridgeHandler.install();
+        java.util.logging.Logger.getLogger("").setLevel(Level.INFO);
+   }
 
 
     public static MetricRegistry getMetricRegistry() {

@@ -293,7 +293,7 @@ public abstract class LocalSession implements Session {
             catch (PacketRejectedException e) {
                 // An interceptor rejected the packet so do nothing
                 if (packet instanceof Message) {
-                    Log.warn("REJECTED {}", packet, e);
+                    Log.debug("REJECTED {}", packet, e);
                 }
             }
             catch (DeliverAttemptToClosedConnection e) {

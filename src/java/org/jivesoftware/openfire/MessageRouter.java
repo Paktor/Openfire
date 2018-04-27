@@ -176,7 +176,7 @@ public class MessageRouter extends BasicModule {
             InterceptorManager.getInstance().invokeInterceptors(packet, session, true, true);
         } catch (PacketRejectedException e) {
 
-            log.warn("REJECTED {}", packet, e);
+            log.debug("REJECTED {}", packet, e);
 
             // An interceptor rejected this packet
             if (session != null && e.getRejectionMessage() != null && e.getRejectionMessage().trim().length() > 0) {
